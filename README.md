@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Candler.dev
 
-## Getting Started
+**The home for every software project.**
 
-First, run the development server:
+Candler is a secure developer workspace that connects your entire technology
+stack — GitHub, Vercel, Supabase, Stripe, Cloudflare, API keys, environment
+variables, credentials, domains, documentation, and more — and organizes
+everything beneath a project. It bridges the services you already use; it does
+not replace them.
+
+> **Status:** Phase 1A (foundation) complete. This is an interface prototype.
+> Data is mock, and no production cryptography is implemented yet — see
+> [Security](#security-honesty).
+
+## Tech stack
+
+- **Next.js 16** (App Router, Turbopack, React 19.2) — TypeScript, strict mode
+- **Tailwind CSS v4** (configured via `@theme` in `app/globals.css`)
+- **lucide-react** for icons
+- Planned: Supabase (auth, Postgres, RLS), Zod, React Hook Form, Stripe
+
+> ⚠️ This project runs a modified Next.js with breaking changes from stock v15.
+> Read the guides in `node_modules/next/dist/docs/` before writing framework
+> code. Key differences already handled: async `params`/`searchParams`,
+> `middleware` → `proxy`, Turbopack by default, `next lint` removed (ESLint CLI),
+> `next.config` `turbopack` is top-level.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev     # start the dev server (Turbopack)
+npm run build   # production build
+npm run lint    # ESLint (flat config)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. The workspace lives at `/dashboard`; press
+`⌘K` / `Ctrl+K` anywhere in the workspace to open the command palette.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+app/
+  layout.tsx            Root layout — fonts, metadata, SkyProvider, background
+  page.tsx              Phase 1A foundation landing (marketing landing → 1B)
+  globals.css           Design tokens (@theme), base styles, glass utils, sky
+  (workspace)/          Route group (no URL segment) sharing the AppShell
+    layout.tsx          Command palette + floating dock
+    dashboard/          /dashboard  (Home)
+    projects/           /projects and /projects/[projectId]
+    vault/  integrations/  activity/  team/  security/  settings/
+components/
+  ui/                   Reusable primitives: Surface, Button, Input, Badge,
+                        Modal, Kbd
+  sky/                  SkyBackground + dev-only SkyPreviewControl
+  navigation/           Dock, CommandPalette, CommandPaletteProvider
+  providers/            SkyProvider (time-of-day context)
+  layout/               AppShell (workspace chrome)
+  workspace/            WorkspacePlaceholder, Greeting
+  marketing/            FoundationPreview (design-system tour)
+config/                 navigation, commands, site metadata
+lib/
+  utilities/            cn (classnames), time (sky periods)
+  mock/                 Prototype mock data (example projects)
+hooks/                  useMediaQuery, usePrefersReducedMotion
+types/                  Shared TypeScript types
+```
 
-## Learn More
+## Design language
 
-To learn more about Next.js, take a look at the following resources:
+Black glass surfaces, purple borders and glow, white typography. Colors are
+defined once as tokens in `app/globals.css` (`--color-ink`, `--color-purple`,
+`--color-lavender`, …) and consumed as Tailwind utilities (`bg-ink`,
+`text-lavender`). Green/yellow/red appear **only** as restrained status colors,
+never decoration.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Dynamic time-of-day sky
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The background changes with the viewer's local time — **morning** (sunrise),
+**afternoon** (blue sky), **evening** (sunset), **night** (stars, subtle
+shooting star). It's pure CSS/gradients/SVG (no WebGL), transitions smoothly,
+and disables all motion under `prefers-reduced-motion`. In development a control
+(top-right) previews each period; a saved timezone preference will drive it
+later (plumbing in `lib/utilities/time.ts`).
 
-## Deploy on Vercel
+## Accessibility
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Semantic HTML, visible focus rings, keyboard-navigable dock and command palette,
+a focus-trapped modal, ARIA labels on icon-only controls, status conveyed by
+icon **and** text (never color alone), and reduced-motion support.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## <a id="security-honesty"></a>Security honesty
+
+This phase is an **interface prototype**. There is no `encrypt()` function
+pretending to be secure, and no real secrets are stored. The UI and data
+abstractions are intentionally shaped so real, production-grade security
+(client-side/envelope encryption, Supabase RLS, MFA, audit trails) can be added
+correctly in later phases — see `AGENTS.md` and the build plan.
