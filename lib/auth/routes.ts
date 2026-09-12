@@ -16,11 +16,12 @@ export const AUTH_ROUTES = {
 } as const;
 
 /** Where to send a user after a successful, fully-assured sign-in. */
-export const DEFAULT_AUTHENTICATED_REDIRECT = "/dashboard";
+export const DEFAULT_AUTHENTICATED_REDIRECT = "/app";
 export const SIGN_IN_PATH = AUTH_ROUTES.signIn;
 
 /** Workspace areas that require an authenticated session. */
 const PROTECTED_PREFIXES = [
+  "/app",
   "/dashboard",
   "/projects",
   "/vault",
@@ -40,6 +41,8 @@ const PROTECTED_PREFIXES = [
 const REDIRECT_IF_AUTHENTICATED = [
   AUTH_ROUTES.signIn,
   AUTH_ROUTES.signUp,
+  "/login",
+  "/signup",
 ] as const;
 
 function matches(pathname: string, base: string): boolean {

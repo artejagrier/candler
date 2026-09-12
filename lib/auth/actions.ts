@@ -358,3 +358,17 @@ export async function signOutAction(): Promise<void> {
   }
   redirect(AUTH_ROUTES.signIn);
 }
+
+export async function changePasswordAction(password: string): Promise<ActionResult> {
+  if (!isSupabaseConfigured) return NOT_CONFIGURED;
+  const parsed=resetPasswordSchema.safeParse({password,confirmPassword:password});
+  if(!parsed.success)return{ok:false,error:firstZodError(parsed.error)};
+  const supabase=await createClient();const{data:{user}}=await supabase.auth.getUser();if(!user)return{ok:false,error:"Authentication required."};
+  const{error}=await supabase.auth.updateUser({password});return error?{ok:false,error:"Password could not be changed."}:{ok:true,message:"Password changed."};
+}
+
+export async function logoutAllSessionsAction(): Promise<ActionResult> {
+  if (!isSupabaseConfigured) return NOT_CONFIGURED;
+  const supabase=await createClient();const{error}=await supabase.auth.signOut({scope:"global"});
+  return error?{ok:false,error:"Sessions could not be revoked."}:{ok:true,redirectTo:AUTH_ROUTES.signIn};
+}

@@ -1,62 +1,15 @@
-import { CtaSection } from "@/components/marketing/CtaSection";
-import { FeatureGrid } from "@/components/marketing/FeatureGrid";
-import { Hero } from "@/components/marketing/Hero";
-import { HowItWorks } from "@/components/marketing/HowItWorks";
-import { IntegrationsSection } from "@/components/marketing/IntegrationsSection";
-import { PricingTable } from "@/components/marketing/PricingTable";
-import { SectionHeading } from "@/components/marketing/SectionHeading";
-import { StatsBar } from "@/components/marketing/StatsBar";
-import { FAQ } from "@/config/marketing";
-import { FaqAccordion } from "@/components/marketing/FaqAccordion";
+import Link from "next/link";
+import { ArrowRight, Bot, Cloud, KeyRound, ShieldCheck } from "lucide-react";
 
-export default function LandingPage() {
-  return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-24 px-4 pb-8 sm:px-6 sm:gap-32">
-      <Hero />
+const products = [
+  { icon: KeyRound, name: "Candler Vault", copy: "Secure developer secrets, credentials, authentication codes, and project environments." },
+  { icon: Bot, name: "Candler Agent", copy: "Understand your stack, detect missing configuration, monitor secret health, and manage developer infrastructure." },
+  { icon: Cloud, name: "Candler Cloud", copy: "Back up project folders, source code, design files, documents, and other development assets." },
+];
 
-      <StatsBar />
-
-      <section aria-labelledby="features-heading">
-        <SectionHeading
-          eyebrow="Features"
-          title={
-            <span id="features-heading">
-              Everything a project needs, in one place
-            </span>
-          }
-          description="Candler organizes the sprawl of modern development around the thing that matters — the project."
-        />
-        <div className="mt-12">
-          <FeatureGrid />
-        </div>
-      </section>
-
-      <IntegrationsSection />
-
-      <HowItWorks />
-
-      <section aria-labelledby="pricing-heading">
-        <SectionHeading
-          eyebrow="Pricing"
-          title={<span id="pricing-heading">Simple, honest pricing</span>}
-          description="Start free. Upgrade when your team grows. No surprises."
-        />
-        <div className="mt-12">
-          <PricingTable />
-        </div>
-      </section>
-
-      <section aria-labelledby="faq-heading" className="mx-auto w-full max-w-3xl">
-        <SectionHeading
-          eyebrow="FAQ"
-          title={<span id="faq-heading">Questions, answered</span>}
-        />
-        <div className="mt-12">
-          <FaqAccordion items={FAQ.slice(0, 4)} />
-        </div>
-      </section>
-
-      <CtaSection />
-    </div>
-  );
-}
+export default function LandingPage() { return <div className="reset-marketing">
+  <section className="reset-hero"><p className="eyebrow">CANDLER</p><h1>Secrets that understand<br/>your stack.</h1><p>Secure your credentials, understand your environments, and back up your development work in one place.</p><div><Link className="primary-button" href="/signup">Get Candler <ArrowRight/></Link><Link className="secondary-button" href="/login">Sign In</Link></div><span className="hero-security"><ShieldCheck/>Encrypted by default. Raw secrets stay out of AI context.</span></section>
+  <section className="product-intro"><div><p className="eyebrow">One quiet home</p><h2>Your developer stack, secured and backed up.</h2></div><p>Candler connects the credentials, context, and project files developers usually scatter across too many tools.</p></section>
+  <section className="product-lines">{products.map(({icon:Icon,...p},i)=><article id={p.name.split(" ")[1].toLowerCase()} key={p.name}><span>0{i+1}</span><Icon/><div><h3>{p.name}</h3><p>{p.copy}</p></div><ArrowRight/></article>)}</section>
+  <section className="pro-callout"><div><p className="eyebrow">Candler Pro</p><h2>Everything you need to understand and protect your stack.</h2><p>Vault, Agent, Secret Health, Authenticator, and Recovery Vault.</p></div><div><strong>$18<small>/month</small></strong><Link className="primary-button" href="/signup">Get Candler Pro <ArrowRight/></Link></div></section>
+  </div>; }

@@ -1,0 +1,2 @@
+import { PageHeader } from "@/components/product/PageHeader"; import { AgentPanel } from "@/components/agent/AgentPanel";
+export default function AgentPage(){const configured=Boolean(process.env.OPENAI_API_KEY&&process.env.OPENAI_AGENT_MODEL);return <><PageHeader eyebrow="Candler Agent" title="Intelligence for your stack." description="Analyze configuration, health, services, and activity without sharing raw secrets with the model."/><AgentPanel configured={configured}/></>}

@@ -43,6 +43,11 @@ export function SignInForm({ next }: { next?: string }) {
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-2">
+        <a className="secondary-button" href={`/auth/oauth?provider=github&next=${encodeURIComponent(next ?? "/app")}`}>GitHub</a>
+        <a className="secondary-button" href={`/auth/oauth?provider=google&next=${encodeURIComponent(next ?? "/app")}`}>Google</a>
+      </div>
+      <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-slate-muted"><span className="h-px flex-1 bg-line"/>or email<span className="h-px flex-1 bg-line"/></div>
       <FormStatus type="error" message={formError} />
 
       <FormField label="Email" error={errors.email?.message}>

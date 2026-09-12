@@ -97,7 +97,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end justify-center p-4 sm:items-center"
+      className="fixed inset-0 z-[var(--z-modal)] flex items-end justify-center p-4 sm:items-center"
       role="presentation"
     >
       {/* Backdrop */}

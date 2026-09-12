@@ -9,7 +9,7 @@ import { FAQ } from "@/config/marketing";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Start free as a solo developer. Upgrade to Team as you grow. Simple, honest pricing.",
+    "Start free with 10 GB. Upgrade to Candler Pro, Pro + Cloud 500, or Pro + Cloud 1 TB.",
 };
 
 export default function PricingPage() {

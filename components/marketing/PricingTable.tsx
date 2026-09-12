@@ -9,7 +9,7 @@ import { cn } from "@/lib/utilities/cn";
 
 export function PricingTable() {
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
       {PRICING_TIERS.map((tier) => (
         <Surface
           key={tier.name}

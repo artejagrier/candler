@@ -1,0 +1,2 @@
+import { redirect } from "next/navigation";import { OnboardingClient } from "@/components/onboarding/OnboardingClient";import { requireUser } from "@/lib/data/auth";import { createClient } from "@/lib/supabase/server";
+export default async function Onboarding(){const user=await requireUser(),supabase=await createClient();const{data}=await supabase.from("user_preferences").select("onboarding_completed_at").eq("user_id",user.id).maybeSingle();if(data?.onboarding_completed_at)redirect("/app");return <OnboardingClient/>}

@@ -14,11 +14,10 @@ import {
 
 /** Top-level marketing navigation. Integrations is an on-page section. */
 export const MARKETING_NAV: { label: string; href: string }[] = [
-  { label: "Features", href: "/features" },
-  { label: "Integrations", href: "/#integrations" },
+  { label: "Vault", href: "/#vault" },
+  { label: "Agent", href: "/#agent" },
+  { label: "Cloud", href: "/#cloud" },
   { label: "Pricing", href: "/pricing" },
-  { label: "About", href: "/about" },
-  { label: "FAQ", href: "/faq" },
 ];
 
 export interface Feature {
@@ -127,47 +126,57 @@ export interface PricingTier {
 
 export const PRICING_TIERS: PricingTier[] = [
   {
-    name: "Solo",
+    name: "Free",
     price: "$0",
-    cadence: "/ forever",
-    description: "For individual developers organizing their own projects.",
+    cadence: "/ month",
+    description: "For individual developers organizing their own stack.",
     features: [
-      "Up to 5 projects",
-      "Connect 3 integrations",
-      "Project vault & environments",
+      "10 GB Cloud storage",
+      "Vault, projects, and environments",
       "Command palette + dynamic sky",
     ],
     cta: "Start for free",
     href: "/sign-up",
   },
   {
-    name: "Team",
+    name: "Candler Pro",
     price: "$18",
-    cadence: "/ user / month",
-    description: "For teams that ship together and share a stack.",
+    cadence: "/ month",
+    description: "The launch plan for serious local-first development.",
     features: [
-      "Unlimited projects",
-      "Unlimited integrations",
-      "Roles, invitations & audit trail",
-      "MFA + recovery codes enforced",
-      "Priority support",
+      "50 GB Cloud storage",
+      "Vault, Agent, Health, Authenticator, and Recovery",
+      "Verified backups and billing portal",
     ],
-    cta: "Start a team",
+    cta: "Start Pro",
     href: "/sign-up",
     highlighted: true,
   },
   {
-    name: "Enterprise",
-    price: "Custom",
-    description: "For organizations with security and compliance needs.",
+    name: "Pro + Cloud 500",
+    price: "$29",
+    cadence: "/ month",
+    description: "Pro, with room for larger project archives.",
     features: [
-      "Everything in Team",
-      "SSO / SAML",
-      "Custom data residency",
-      "Dedicated support & SLAs",
+      "Everything in Pro",
+      "500 GB Cloud storage",
+      "Server-enforced quota",
     ],
-    cta: "Contact sales",
-    href: "/contact",
+    cta: "Choose 500 GB",
+    href: "/sign-up",
+  },
+  {
+    name: "Pro + Cloud 1 TB",
+    price: "$39",
+    cadence: "/ month",
+    description: "Pro, with a terabyte of Cloud backup.",
+    features: [
+      "Everything in Pro",
+      "1 TB Cloud storage",
+      "Server-enforced quota",
+    ],
+    cta: "Choose 1 TB",
+    href: "/sign-up",
   },
 ];
 
@@ -195,7 +204,7 @@ export const FAQ: FaqItem[] = [
   {
     question: "Is there a free plan?",
     answer:
-      "Yes. The Solo plan is free forever for individual developers, including the project vault, environments, and the command palette.",
+      "Yes. Free includes 10 GB of Cloud storage. Paid launch plans are Candler Pro at $18/month for 50 GB, Pro + Cloud 500 at $29/month, and Pro + Cloud 1 TB at $39/month. Team pricing is not for sale yet.",
   },
   {
     question: "What is the dynamic sky?",

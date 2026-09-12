@@ -1,0 +1,2 @@
+import { validateServerEnvironment } from "@/lib/env-validation";
+export async function GET(){const state=validateServerEnvironment();return Response.json({ok:state.productionReady,services:{core:{configured:state.core.configured},cloud:{configured:state.cloud.configured},billing:{configured:state.billing.configured},agent:{configured:state.agent.configured}},encryptionConfigured:state.encryptionKeyValid},{status:state.productionReady?200:503,headers:{"Cache-Control":"no-store"}})}

@@ -1,0 +1,2 @@
+import { PageHeader } from "@/components/product/PageHeader";import { ProjectsClient } from "@/components/projects/ProjectsClient";import { getWorkspaceData } from "@/lib/data/queries";import { isSupabaseConfigured } from "@/lib/env";
+export default async function Projects(){const data=isSupabaseConfigured?await getWorkspaceData():null;return <><PageHeader eyebrow="Workspace" title="Projects" description="The shared context connecting Vault, Agent, and Cloud."/><ProjectsClient projects={(data?.projects??[]) as never[]}/></>}
