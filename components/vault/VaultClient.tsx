@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Copy, Eye, EyeOff, Lock, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { createSecretAction, deleteSecretAction, importEnvAction, updateSecretAction } from "@/lib/product/actions";
 import { parseEnvFile } from "@/lib/vault/env-import";
 import { observeCopy } from "@/lib/product/client-security";
+import { vaultSearchHaystack, vaultUserError, type VaultPendingAuth } from "@/lib/vault/client-copy";
 import { StepUpDialog } from "@/components/product/StepUpDialog";
+import { VaultDialog } from "@/components/vault/VaultDialog";
 
 type Project = { id: string; name: string; environments: { id: string; name: string; kind: string }[] };
 type Secret = {
@@ -22,6 +25,8 @@ type Secret = {
   services: { name: string } | null;
 };
 
+type BusyKey = string | null;
+
 export function VaultClient({
   secrets,
   projects,
@@ -31,36 +36,80 @@ export function VaultClient({
   projects: Project[];
   initialProjectId?: string;
 }) {
+  const router = useRouter();
+  const [added, setAdded] = useState<Secret[]>([]);
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const [patches, setPatches] = useState<Record<string, Partial<Secret>>>({});
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Secret | null>(null);
+  const [deleting, setDeleting] = useState<Secret | null>(null);
   const [envOpen, setEnvOpen] = useState(false);
   const [envText, setEnvText] = useState("");
   const [deselected, setDeselected] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState("");
-  const [pendingReveal, setPendingReveal] = useState<null | (() => Promise<void>)>(null);
-  const [pending, start] = useTransition();
+  const [pendingAuth, setPendingAuth] = useState<VaultPendingAuth | null>(null);
+  const [busy, setBusy] = useState<BusyKey>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState(initialProjectId ?? "");
+  const [environmentFilter, setEnvironmentFilter] = useState("");
+  const [serviceFilter, setServiceFilter] = useState("");
+  const [draftProjectId, setDraftProjectId] = useState(projects[0]?.id ?? "");
+  const [draftEnvironmentId, setDraftEnvironmentId] = useState(projects[0]?.environments[0]?.id ?? "");
+  const [importProjectId, setImportProjectId] = useState(projects[0]?.id ?? "");
+  const [importEnvironmentId, setImportEnvironmentId] = useState(projects[0]?.environments[0]?.id ?? "");
+  const inflight = useRef(new Set<string>());
+  const copiedTimer = useRef<number | null>(null);
   const entries = useMemo(() => parseEnvFile(envText), [envText]);
   const first = projects[0];
+  const draftEnvironments = projects.find((project) => project.id === draftProjectId)?.environments ?? [];
+  const importEnvironments = projects.find((project) => project.id === importProjectId)?.environments ?? [];
+
+  const rows = useMemo(() => {
+    const removed = new Set(removedIds);
+    const fromServer = secrets
+      .filter((row) => !removed.has(row.id))
+      .map((row) => (patches[row.id] ? { ...row, ...patches[row.id] } : row));
+    const extras = added.filter((row) => !secrets.some((item) => item.id === row.id) && !removed.has(row.id));
+    return [...extras, ...fromServer];
+  }, [secrets, added, removedIds, patches]);
+
+  useEffect(() => () => {
+    if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
+  }, []);
+
+  const environmentOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const row of rows) {
+      if (projectFilter && row.project_id !== projectFilter) continue;
+      if (row.environments?.name) names.add(row.environments.name);
+    }
+    return [...names].sort();
+  }, [rows, projectFilter]);
+
+  const serviceOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const row of rows) {
+      if (projectFilter && row.project_id !== projectFilter) continue;
+      if (environmentFilter && (row.environments?.name ?? "") !== environmentFilter) continue;
+      if (row.services?.name) names.add(row.services.name);
+    }
+    return [...names].sort();
+  }, [rows, projectFilter, environmentFilter]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return secrets.filter((row) => {
+    return rows.filter((row) => {
       if (projectFilter && row.project_id !== projectFilter) return false;
+      if (environmentFilter && (row.environments?.name ?? "") !== environmentFilter) return false;
+      if (serviceFilter && (row.services?.name ?? "") !== serviceFilter) return false;
       if (!q) return true;
-      const hay = [row.name, row.services?.name, row.projects?.name, row.environments?.name]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
+      return vaultSearchHaystack(row).includes(q);
     });
-  }, [secrets, query, projectFilter]);
+  }, [rows, query, projectFilter, environmentFilter, serviceFilter]);
 
-  // Security state derived from real metadata only. Green = protected/encrypted,
-  // amber = attention (rotate/expiring), red = expired. Never reveals the value.
   const DAY = 86_400_000;
   function secretState(row: Secret): { label: string; cls: string } {
     if (row.expires_at && new Date(row.expires_at).getTime() < now) return { label: "Expired", cls: "failed" };
@@ -71,28 +120,279 @@ export function VaultClient({
 
   useEffect(() => {
     if (!Object.keys(revealed).length) return;
-    const id = setTimeout(() => setRevealed({}), 15_000);
-    return () => clearTimeout(id);
+    const id = window.setTimeout(() => setRevealed({}), 15_000);
+    return () => window.clearTimeout(id);
   }, [revealed]);
 
-  async function reveal(id: string) {
-    if (revealed[id]) {
-      setRevealed((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
-      return;
-    }
-    const response = await fetch(`/api/vault/secrets/${id}/reveal`, { method: "POST" });
-    const body = await response.json() as { value?: string; error?: string; code?: string };
-    if (response.status === 403 && body.code === "REAUTH_REQUIRED") {
-      setPendingReveal(() => () => reveal(id));
-      return;
-    }
-    if (response.ok && body.value) setRevealed((current) => ({ ...current, [id]: body.value! }));
-    else setMessage(body.error ?? "Secret could not be revealed.");
+  function claim(key: string) {
+    if (inflight.current.has(key)) return false;
+    inflight.current.add(key);
+    setBusy(key);
+    return true;
   }
+
+  function release(key: string) {
+    inflight.current.delete(key);
+    setBusy((current) => (current === key ? null : current));
+  }
+
+  function hideValue(id: string) {
+    setRevealed((current) => {
+      if (!(id in current)) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
+
+  async function requestReveal(id: string, intent: VaultPendingAuth["intent"]) {
+    const response = await fetch(`/api/vault/secrets/${id}/reveal`, { method: "POST" });
+    const body = await response.json().catch(() => ({})) as { value?: string; error?: string; code?: string };
+    if (response.status === 403 && body.code === "REAUTH_REQUIRED") {
+      setPendingAuth({ id, intent });
+      return "auth" as const;
+    }
+    if (!response.ok || !body.value) {
+      setMessage(vaultUserError("Unable to reveal secret.", body.error, response.status));
+      return null;
+    }
+    return body.value;
+  }
+
+  async function revealSecret(id: string) {
+    if (revealed[id]) {
+      hideValue(id);
+      return;
+    }
+    const key = `reveal:${id}`;
+    if (!claim(key)) return;
+    setMessage("");
+    try {
+      const value = await requestReveal(id, "reveal");
+      if (value && value !== "auth") setRevealed((current) => ({ ...current, [id]: value }));
+    } catch {
+      setMessage("Unable to reveal secret.");
+    } finally {
+      release(key);
+    }
+  }
+
+  function markCopied(id: string) {
+    setCopiedId(id);
+    if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => {
+      setCopiedId((current) => (current === id ? null : current));
+    }, 2000);
+  }
+
+  async function copySecret(id: string) {
+    const key = `copy:${id}`;
+    if (!claim(key)) return;
+    setMessage("");
+    try {
+      let value = revealed[id];
+      if (!value) {
+        const fetched = await requestReveal(id, "copy");
+        if (!fetched || fetched === "auth") return;
+        value = fetched;
+      }
+      await navigator.clipboard.writeText(value);
+      void observeCopy("secret.copied", id);
+      markCopied(id);
+    } catch {
+      setMessage("Unable to copy secret.");
+    } finally {
+      release(key);
+    }
+  }
+
+  function resumeAfterStepUp() {
+    const pending = pendingAuth;
+    setPendingAuth(null);
+    if (!pending) return;
+    if (pending.intent === "copy") void copySecret(pending.id);
+    else void revealSecret(pending.id);
+  }
+
+  function openAdd() {
+    const projectId = projectFilter || first?.id || "";
+    const environments = projects.find((project) => project.id === projectId)?.environments ?? [];
+    setDraftProjectId(projectId);
+    setDraftEnvironmentId(environments[0]?.id ?? "");
+    setMessage("");
+    setOpen(true);
+  }
+
+  function openImport() {
+    const projectId = projectFilter || first?.id || "";
+    const environments = projects.find((project) => project.id === projectId)?.environments ?? [];
+    setImportProjectId(projectId);
+    setImportEnvironmentId(environments[0]?.id ?? "");
+    setEnvText("");
+    setDeselected({});
+    setMessage("");
+    setEnvOpen(true);
+  }
+
+  function showCreatedRow(input: {
+    id: string;
+    name: string;
+    notes: string;
+    projectId: string;
+    environmentId: string | null;
+    serviceName: string;
+  }) {
+    const project = projects.find((item) => item.id === input.projectId);
+    const environment = project?.environments.find((item) => item.id === input.environmentId);
+    const next: Secret = {
+      id: input.id,
+      name: input.name,
+      notes: input.notes || null,
+      expires_at: null,
+      rotate_at: null,
+      updated_at: new Date().toISOString(),
+      project_id: input.projectId,
+      projects: project ? { name: project.name } : null,
+      environments: environment ? { name: environment.name } : null,
+      services: { name: input.serviceName },
+    };
+    setAdded((current) => [next, ...current.filter((row) => row.id !== next.id)]);
+    if (projectFilter && projectFilter !== input.projectId) setProjectFilter(input.projectId);
+    if (environmentFilter && environmentFilter !== (environment?.name ?? "")) setEnvironmentFilter("");
+    if (serviceFilter && serviceFilter !== input.serviceName) setServiceFilter("");
+  }
+
+  async function onCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!claim("save")) return;
+    const form = new FormData(event.currentTarget);
+    const payload = {
+      projectId: String(form.get("projectId")),
+      environmentId: String(form.get("environmentId")) || null,
+      serviceName: String(form.get("serviceName")),
+      name: String(form.get("name")),
+      value: String(form.get("value")),
+      notes: String(form.get("notes")),
+    };
+    setMessage("");
+    try {
+      const result = await createSecretAction(payload);
+      if (!result.ok) {
+        setMessage(vaultUserError("Unable to save secret.", result.error));
+        return;
+      }
+      if (result.data?.id) showCreatedRow({ ...payload, id: result.data.id });
+      setOpen(false);
+      router.refresh();
+    } catch {
+      setMessage("Unable to save secret.");
+    } finally {
+      release("save");
+    }
+  }
+
+  async function onUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing || !claim("update")) return;
+    const form = new FormData(event.currentTarget);
+    const value = String(form.get("value"));
+    const expires = String(form.get("expiresAt"));
+    const rotate = String(form.get("rotateAt"));
+    const name = String(form.get("name"));
+    const notes = String(form.get("notes"));
+    const id = editing.id;
+    setMessage("");
+    try {
+      const result = await updateSecretAction({
+        id,
+        name,
+        notes,
+        expiresAt: expires ? new Date(expires).toISOString() : null,
+        rotateAt: rotate ? new Date(rotate).toISOString() : null,
+        value: value || undefined,
+      });
+      if (!result.ok) {
+        setMessage(vaultUserError("Unable to save secret.", result.error));
+        return;
+      }
+      setPatches((current) => ({
+        ...current,
+        [id]: {
+          name,
+          notes: notes || null,
+          expires_at: expires ? new Date(expires).toISOString() : null,
+          rotate_at: rotate ? new Date(rotate).toISOString() : null,
+          updated_at: new Date().toISOString(),
+        },
+      }));
+      if (value) hideValue(id);
+      setEditing(null);
+      router.refresh();
+    } catch {
+      setMessage("Unable to save secret.");
+    } finally {
+      release("update");
+    }
+  }
+
+  async function onDelete() {
+    if (!deleting || !claim(`delete:${deleting.id}`)) return;
+    const target = deleting;
+    setRemovedIds((current) => (current.includes(target.id) ? current : [...current, target.id]));
+    hideValue(target.id);
+    setMessage("");
+    try {
+      const result = await deleteSecretAction(target.id);
+      if (!result.ok) {
+        setRemovedIds((current) => current.filter((id) => id !== target.id));
+        setMessage(vaultUserError("Unable to delete secret.", result.error));
+        return;
+      }
+      setDeleting(null);
+      router.refresh();
+    } catch {
+      setRemovedIds((current) => current.filter((id) => id !== target.id));
+      setMessage("Unable to delete secret.");
+    } finally {
+      release(`delete:${target.id}`);
+    }
+  }
+
+  async function onImport() {
+    if (!claim("import")) return;
+    const chosen = entries.filter((entry) => !deselected[entry.name]);
+    setMessage("");
+    try {
+      const result = await importEnvAction({
+        projectId: importProjectId,
+        environmentId: importEnvironmentId,
+        entries: chosen.map((entry) => ({ name: entry.name, value: entry.value, serviceName: entry.serviceName })),
+      });
+      if (!result.ok) {
+        setMessage(vaultUserError("Unable to save secret.", result.error));
+        return;
+      }
+      setEnvOpen(false);
+      setEnvText("");
+      setDeselected({});
+      setMessage(`Imported ${result.data?.created ?? 0}; skipped ${result.data?.duplicates.length ?? 0} duplicates.`);
+      router.refresh();
+    } catch {
+      setMessage("Unable to save secret.");
+    } finally {
+      release("import");
+    }
+  }
+
+  function onProjectFilter(value: string) {
+    setProjectFilter(value);
+    setEnvironmentFilter("");
+    setServiceFilter("");
+  }
+
+  const saving = busy === "save";
+  const updating = busy === "update";
+  const importing = busy === "import";
 
   return (
     <>
@@ -111,7 +411,7 @@ export function VaultClient({
             className="vault-project-filter"
             aria-label="Filter by project"
             value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value)}
+            onChange={(e) => onProjectFilter(e.target.value)}
           >
             <option value="">All projects</option>
             {projects.map((project) => (
@@ -119,15 +419,49 @@ export function VaultClient({
             ))}
           </select>
         ) : null}
+        {environmentOptions.length ? (
+          <select
+            className="vault-project-filter"
+            aria-label="Filter by environment"
+            value={environmentFilter}
+            onChange={(e) => {
+              setEnvironmentFilter(e.target.value);
+              setServiceFilter("");
+            }}
+          >
+            <option value="">All environments</option>
+            {environmentOptions.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        ) : null}
+        {serviceOptions.length ? (
+          <select
+            className="vault-project-filter"
+            aria-label="Filter by service"
+            value={serviceFilter}
+            onChange={(e) => setServiceFilter(e.target.value)}
+          >
+            <option value="">All services</option>
+            {serviceOptions.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        ) : null}
+        {(query || projectFilter || environmentFilter || serviceFilter) ? (
+          <button type="button" className="text-link" onClick={() => { setQuery(""); setProjectFilter(""); setEnvironmentFilter(""); setServiceFilter(""); }}>
+            Clear filters
+          </button>
+        ) : null}
         <Link className="quiet-link" href="/app/vault/recovery">Recovery</Link>
         <div className="flex gap-2">
-          <button className="secondary-button" onClick={() => setEnvOpen(true)} disabled={!projects.length}><Upload />Import .env</button>
-          <button className="primary-button" onClick={() => setOpen(true)} disabled={!projects.length}><Plus />Add secret</button>
+          <button type="button" className="secondary-button" onClick={openImport} disabled={!projects.length}><Upload />Import .env</button>
+          <button type="button" className="primary-button" onClick={openAdd} disabled={!projects.length}><Plus />Add secret</button>
         </div>
       </div>
       {visible.length === 0 ? (
         <div className="empty-state">
-          <h2>{secrets.length ? "No matching secrets." : "No secrets yet."}</h2>
+          <h2>{rows.length ? "No matching secrets." : "No secrets yet."}</h2>
           <p>{projects.length ? "Add a credential or import a .env file." : "Create a project before adding credentials."}</p>
         </div>
       ) : (
@@ -137,7 +471,12 @@ export function VaultClient({
               <tr><th>Name</th><th>Service</th><th>Project / Environment</th><th>State</th><th>Updated</th><th></th></tr>
             </thead>
             <tbody>
-              {visible.map((row) => (
+              {visible.map((row) => {
+                const revealing = busy === `reveal:${row.id}`;
+                const copying = busy === `copy:${row.id}`;
+                const rowDeleting = busy === `delete:${row.id}`;
+                const shown = revealed[row.id];
+                return (
                   <tr key={row.id}>
                     <td>
                       <div className="secret-name">
@@ -145,8 +484,8 @@ export function VaultClient({
                         <span>
                           <b>{row.name}</b>
                           <code className="secret-masked">
-                            {revealed[row.id] ? (
-                              revealed[row.id]
+                            {shown ? (
+                              shown
                             ) : (
                               <>
                                 <Lock aria-hidden="true" />
@@ -171,169 +510,176 @@ export function VaultClient({
                     <td>{new Date(row.updated_at).toLocaleDateString()}</td>
                     <td>
                       <div className="row-actions">
-                        <button onClick={() => start(() => reveal(row.id))} aria-label="Reveal">{revealed[row.id] ? <EyeOff /> : <Eye />}</button>
                         <button
-                          onClick={() => {
-                            const value = revealed[row.id];
-                            if (!value) return;
-                            void navigator.clipboard.writeText(value);
-                            void observeCopy("secret.copied", row.id);
-                          }}
-                          aria-label="Copy"
-                          disabled={!revealed[row.id]}
+                          type="button"
+                          onClick={() => void revealSecret(row.id)}
+                          aria-label={shown ? "Hide" : revealing ? "Revealing…" : "Reveal"}
+                          disabled={revealing || rowDeleting}
                         >
-                          <Copy />
+                          {shown ? <EyeOff /> : <Eye />}
                         </button>
-                        <button onClick={() => setEditing(row)} aria-label="Edit"><Pencil /></button>
                         <button
-                          onClick={() => {
-                            if (confirm(`Delete ${row.name}? This cannot be undone.`)) {
-                              start(async () => {
-                                const result = await deleteSecretAction(row.id);
-                                if (!result.ok) setMessage(result.error);
-                              });
-                            }
-                          }}
-                          aria-label="Delete"
+                          type="button"
+                          onClick={() => void copySecret(row.id)}
+                          aria-label={copiedId === row.id ? "Copied" : copying ? "Copying…" : "Copy"}
+                          disabled={copying || rowDeleting}
                         >
+                          {copiedId === row.id ? "Copied" : <Copy />}
+                        </button>
+                        <button type="button" onClick={() => { setMessage(""); setEditing(row); }} aria-label="Edit" disabled={rowDeleting}>
+                          <Pencil />
+                        </button>
+                        <button type="button" onClick={() => setDeleting(row)} aria-label="Delete" disabled={rowDeleting}>
                           <Trash2 />
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
+                );
+              })}
+            </tbody>
           </table>
         </div>
       )}
-      {message ? <p className="security-note">{message}</p> : <p className="security-note">Values are decrypted only after password confirmation or MFA, and automatically hidden after 15 seconds.</p>}
+      {message ? <p className="security-note" role="alert">{message}</p> : <p className="security-note">Values are decrypted only after password confirmation or MFA, and automatically hidden after 15 seconds.</p>}
 
       {open && first ? (
-        <div className="modal-backdrop">
-          <form
-            className="workflow-dialog"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              start(async () => {
-                const result = await createSecretAction({
-                  projectId: String(form.get("projectId")),
-                  environmentId: String(form.get("environmentId")) || null,
-                  serviceName: String(form.get("serviceName")),
-                  name: String(form.get("name")),
-                  value: String(form.get("value")),
-                  notes: String(form.get("notes")),
-                });
-                if (result.ok) setOpen(false);
-                else setMessage(result.error);
-              });
-            }}
-          >
-            <h2>Add secret</h2>
-            <label>Project<select name="projectId" defaultValue={first.id}>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
-            <label>Environment<select name="environmentId">{projects.flatMap((project) => project.environments.map((environment) => <option value={environment.id} key={environment.id}>{project.name} · {environment.name}</option>))}</select></label>
-            <label>Service<input name="serviceName" required placeholder="Stripe" /></label>
-            <label>Name<input name="name" required placeholder="STRIPE_SECRET_KEY" /></label>
+        <VaultDialog
+          open
+          title="Add secret"
+          preventClose={saving}
+          onClose={() => { if (!saving) setOpen(false); }}
+          footer={(
+            <>
+              <button type="button" className="secondary-button" onClick={() => setOpen(false)} disabled={saving}>Cancel</button>
+              <button form="vault-add-form" type="submit" className="primary-button" disabled={saving}>{saving ? "Saving…" : "Encrypt & save"}</button>
+            </>
+          )}
+        >
+          <form id="vault-add-form" onSubmit={(event) => void onCreate(event)}>
+            <label>Project
+              <select
+                name="projectId"
+                value={draftProjectId}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setDraftProjectId(next);
+                  setDraftEnvironmentId(projects.find((project) => project.id === next)?.environments[0]?.id ?? "");
+                }}
+              >
+                {projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
+              </select>
+            </label>
+            <label>Environment
+              <select name="environmentId" value={draftEnvironmentId} onChange={(event) => setDraftEnvironmentId(event.target.value)}>
+                {draftEnvironments.map((environment) => <option value={environment.id} key={environment.id}>{environment.name}</option>)}
+              </select>
+            </label>
+            <label>Service<input name="serviceName" required placeholder="Stripe" autoComplete="off" /></label>
+            <label>Name<input name="name" required placeholder="STRIPE_SECRET_KEY" autoComplete="off" /></label>
             <label>Secret value<textarea name="value" required autoComplete="off" /></label>
             <label>Notes<textarea name="notes" /></label>
-            <div>
-              <button type="button" className="secondary-button" onClick={() => setOpen(false)}>Cancel</button>
-              <button className="primary-button" disabled={pending}>Encrypt & save</button>
-            </div>
           </form>
-        </div>
+        </VaultDialog>
       ) : null}
 
       {editing ? (
-        <div className="modal-backdrop">
-          <form
-            className="workflow-dialog"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              const value = String(form.get("value"));
-              start(async () => {
-                const expires = String(form.get("expiresAt"));
-                const rotate = String(form.get("rotateAt"));
-                const result = await updateSecretAction({
-                  id: editing.id,
-                  name: String(form.get("name")),
-                  notes: String(form.get("notes")),
-                  expiresAt: expires ? new Date(expires).toISOString() : null,
-                  rotateAt: rotate ? new Date(rotate).toISOString() : null,
-                  value: value || undefined,
-                });
-                if (result.ok) setEditing(null);
-                else setMessage(result.error);
-              });
-            }}
-          >
-            <h2>Edit secret</h2>
+        <VaultDialog
+          open
+          title="Edit secret"
+          preventClose={updating}
+          onClose={() => { if (!updating) setEditing(null); }}
+          footer={(
+            <>
+              <button type="button" className="secondary-button" onClick={() => setEditing(null)} disabled={updating}>Cancel</button>
+              <button form="vault-edit-form" type="submit" className="primary-button" disabled={updating}>{updating ? "Updating…" : "Save"}</button>
+            </>
+          )}
+        >
+          <form id="vault-edit-form" onSubmit={(event) => void onUpdate(event)}>
             <label>Name<input name="name" required defaultValue={editing.name} /></label>
             <label>Notes<textarea name="notes" defaultValue={editing.notes ?? ""} /></label>
             <label>Expires<input name="expiresAt" type="datetime-local" defaultValue={editing.expires_at?.slice(0, 16) ?? ""} /></label>
             <label>Rotate after<input name="rotateAt" type="datetime-local" defaultValue={editing.rotate_at?.slice(0, 16) ?? ""} /></label>
             <label>Rotate value<textarea name="value" placeholder="Leave blank to keep the current value" autoComplete="off" /></label>
-            <div>
-              <button type="button" className="secondary-button" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="primary-button" disabled={pending}>Save</button>
-            </div>
           </form>
-        </div>
+        </VaultDialog>
+      ) : null}
+
+      {deleting ? (
+        <VaultDialog
+          open
+          title="Delete secret"
+          description={`Delete ${deleting.name}? This cannot be undone.`}
+          preventClose={busy === `delete:${deleting.id}`}
+          onClose={() => { if (busy !== `delete:${deleting.id}`) setDeleting(null); }}
+          footer={(
+            <>
+              <button type="button" className="secondary-button" onClick={() => setDeleting(null)} disabled={busy === `delete:${deleting.id}`}>Cancel</button>
+              <button type="button" className="primary-button" onClick={() => void onDelete()} disabled={busy === `delete:${deleting.id}`} data-autofocus>
+                {busy === `delete:${deleting.id}` ? "Deleting…" : "Delete"}
+              </button>
+            </>
+          )}
+        >
+          <p>The encrypted credential will be removed from this workspace. It cannot be revealed after deletion.</p>
+        </VaultDialog>
       ) : null}
 
       {envOpen && first ? (
-        <div className="modal-backdrop">
-          <div className="workflow-dialog">
-            <h2>Import .env</h2>
-            <label>Project<select id="env-project" defaultValue={first.id}>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
-            <label>Environment<select id="env-environment">{first.environments.map((environment) => <option value={environment.id} key={environment.id}>{environment.name}</option>)}</select></label>
-            <label>.env contents<textarea value={envText} onChange={(event) => setEnvText(event.target.value)} autoComplete="off" /></label>
-            <div className="env-preview">
-              {entries.length ? entries.map((entry) => (
-                <label key={entry.name}>
-                  <input type="checkbox" checked={!deselected[entry.name]} onChange={(event) => setDeselected((current) => ({ ...current, [entry.name]: !event.target.checked }))} />
-                  <b>{entry.name}</b>
-                  <span>{entry.serviceName}{entry.isPublic ? " · public" : ""}</span>
-                </label>
-              )) : <p>No valid entries detected.</p>}
-            </div>
-            <div>
-              <button className="secondary-button" onClick={() => setEnvOpen(false)}>Cancel</button>
+        <VaultDialog
+          open
+          title="Import .env"
+          preventClose={importing}
+          onClose={() => { if (!importing) setEnvOpen(false); }}
+          footer={(
+            <>
+              <button type="button" className="secondary-button" onClick={() => setEnvOpen(false)} disabled={importing}>Cancel</button>
               <button
+                type="button"
                 className="primary-button"
-                disabled={!entries.some((entry) => !deselected[entry.name]) || pending}
-                onClick={() => start(async () => {
-                  const projectId = (document.getElementById("env-project") as HTMLSelectElement).value;
-                  const environmentId = (document.getElementById("env-environment") as HTMLSelectElement).value;
-                  const chosen = entries.filter((entry) => !deselected[entry.name]);
-                  const result = await importEnvAction({
-                    projectId,
-                    environmentId,
-                    entries: chosen.map((entry) => ({ name: entry.name, value: entry.value, serviceName: entry.serviceName })),
-                  });
-                  if (result.ok) {
-                    setEnvOpen(false);
-                    setEnvText("");
-                    setMessage(`Imported ${result.data?.created ?? 0}; skipped ${result.data?.duplicates.length ?? 0} duplicates.`);
-                  } else setMessage(result.error);
-                })}
+                disabled={!entries.some((entry) => !deselected[entry.name]) || importing}
+                onClick={() => void onImport()}
               >
-                Import selected
+                {importing ? "Importing…" : "Import selected"}
               </button>
-            </div>
+            </>
+          )}
+        >
+          <label>Project
+            <select
+              value={importProjectId}
+              onChange={(event) => {
+                const next = event.target.value;
+                setImportProjectId(next);
+                setImportEnvironmentId(projects.find((project) => project.id === next)?.environments[0]?.id ?? "");
+              }}
+            >
+              {projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
+            </select>
+          </label>
+          <label>Environment
+            <select value={importEnvironmentId} onChange={(event) => setImportEnvironmentId(event.target.value)}>
+              {importEnvironments.map((environment) => <option value={environment.id} key={environment.id}>{environment.name}</option>)}
+            </select>
+          </label>
+          <label>.env contents<textarea value={envText} onChange={(event) => setEnvText(event.target.value)} autoComplete="off" /></label>
+          <div className="env-preview">
+            {entries.length ? entries.map((entry) => (
+              <label key={entry.name}>
+                <input type="checkbox" checked={!deselected[entry.name]} onChange={(event) => setDeselected((current) => ({ ...current, [entry.name]: !event.target.checked }))} />
+                <b>{entry.name}</b>
+                <span>{entry.serviceName}{entry.isPublic ? " · public" : ""}</span>
+              </label>
+            )) : <p>No valid entries detected.</p>}
           </div>
-        </div>
+        </VaultDialog>
       ) : null}
 
-      {pendingReveal ? (
+      {pendingAuth ? (
         <StepUpDialog
-          onClose={() => setPendingReveal(null)}
-          onVerified={() => {
-            const retry = pendingReveal;
-            setPendingReveal(null);
-            void retry();
-          }}
+          onClose={() => setPendingAuth(null)}
+          onVerified={resumeAfterStepUp}
         />
       ) : null}
     </>

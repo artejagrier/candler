@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -16,25 +16,37 @@ const FOCUSABLE =
  * - Tab / Shift+Tab focus trap within the panel
  * - focus restored to the previously-active element on unmount
  *
+ * onClose is read from a ref so parent re-renders do not re-bind listeners
+ * or steal focus (which made Vault step-up require a second click).
+ *
  * The panel element must be focusable as a fallback (give it tabIndex={-1}).
  */
 export function useDialogA11y(
   panelRef: RefObject<HTMLElement | null>,
   onClose: () => void,
 ): void {
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
 
     const panel = panelRef.current;
-    const first = panel?.querySelector<HTMLElement>(FOCUSABLE);
+    const preferred = panel?.querySelector<HTMLElement>(
+      "[data-autofocus], input:not([disabled]), textarea:not([disabled]), select:not([disabled])",
+    );
+    const first = preferred ?? panel?.querySelector<HTMLElement>(FOCUSABLE);
     (first ?? panel)?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !panel) return;
@@ -43,7 +55,6 @@ export function useDialogA11y(
         panel.querySelectorAll<HTMLElement>(FOCUSABLE),
       ).filter((el) => el.offsetParent !== null);
       if (focusable.length === 0) {
-        // Nothing focusable — keep focus on the panel rather than escaping it.
         event.preventDefault();
         panel.focus();
         return;
@@ -68,5 +79,5 @@ export function useDialogA11y(
       document.body.style.overflow = overflow;
       previouslyFocused?.focus?.();
     };
-  }, [panelRef, onClose]);
+  }, [panelRef]);
 }

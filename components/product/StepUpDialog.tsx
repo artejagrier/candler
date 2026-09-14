@@ -9,6 +9,7 @@ import { useDialogA11y } from "@/hooks/useDialogA11y";
 export function StepUpDialog({ onClose, onVerified }: { onClose: () => void; onVerified: () => void }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const submitting = useRef(false);
   const panelRef = useRef<HTMLFormElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -34,12 +35,21 @@ export function StepUpDialog({ onClose, onVerified }: { onClose: () => void; onV
         tabIndex={-1}
         onSubmit={(event) => {
           event.preventDefault();
+          if (submitting.current) return;
+          submitting.current = true;
           const password = String(new FormData(event.currentTarget).get("password"));
           setPending(true);
           void confirmStepUp(password).then((result) => {
-            setPending(false);
             if (result.ok) onVerified();
-            else setError(result.error ?? "Password verification failed.");
+            else {
+              submitting.current = false;
+              setPending(false);
+              setError(result.error ?? "Password verification failed.");
+            }
+          }).catch(() => {
+            submitting.current = false;
+            setPending(false);
+            setError("Recent authentication could not be confirmed.");
           });
         }}
       >
@@ -52,7 +62,7 @@ export function StepUpDialog({ onClose, onVerified }: { onClose: () => void; onV
         {error ? <p className="security-note" role="alert">{error}</p> : null}
         <div>
           <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button className="primary-button" disabled={pending}>Confirm</button>
+          <button className="primary-button" disabled={pending}>{pending ? "Confirming…" : "Confirm"}</button>
         </div>
       </form>
     </div>,
