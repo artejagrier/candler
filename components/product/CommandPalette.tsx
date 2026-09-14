@@ -1,16 +1,19 @@
 "use client";
 
 import {
+  Activity,
   Bot,
   Cloud,
   CornerDownLeft,
+  CreditCard,
   FolderKanban,
-  Home,
   KeyRound,
+  LayoutDashboard,
   Loader2,
   Plus,
   Search,
   Settings,
+  Shield,
   ShieldCheck,
   Upload,
   type LucideIcon,
@@ -41,12 +44,15 @@ const ACTIONS: StaticCommand[] = [
 ];
 
 const NAV: StaticCommand[] = [
-  { id: "n-home", label: "Home", hint: "Workspace overview", icon: Home, href: "/app" },
+  { id: "n-dashboard", label: "Dashboard", hint: "Workspace command center", icon: LayoutDashboard, href: "/app", keywords: ["home", "overview"] },
   { id: "n-projects", label: "Projects", hint: "All projects", icon: FolderKanban, href: "/app/projects" },
-  { id: "n-vault", label: "Vault", hint: "Secrets, authenticator, recovery", icon: KeyRound, href: "/app/vault" },
+  { id: "n-vault", label: "Vault", hint: "Encrypted secrets", icon: KeyRound, href: "/app/vault" },
+  { id: "n-auth", label: "Authenticator", hint: "TOTP codes", icon: Shield, href: "/app/vault/authenticator", keywords: ["totp", "2fa"] },
   { id: "n-cloud", label: "Cloud", hint: "Verified backups", icon: Cloud, href: "/app/cloud" },
   { id: "n-agent", label: "Agent", hint: "Candler Agent", icon: Bot, href: "/app/agent" },
-  { id: "n-settings", label: "Settings", hint: "Account, security, billing", icon: Settings, href: "/app/settings" },
+  { id: "n-activity", label: "Activity", hint: "Workspace history", icon: Activity, href: "/app/activity" },
+  { id: "n-settings", label: "Settings", hint: "Account and security", icon: Settings, href: "/app/settings" },
+  { id: "n-billing", label: "Billing", hint: "Plan and Cloud storage", icon: CreditCard, href: "/app/settings/billing" },
 ];
 
 interface SearchResult {

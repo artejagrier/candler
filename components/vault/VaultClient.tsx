@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Copy, Eye, EyeOff, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { Copy, Eye, EyeOff, Lock, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { createSecretAction, deleteSecretAction, importEnvAction, updateSecretAction } from "@/lib/product/actions";
 import { parseEnvFile } from "@/lib/vault/env-import";
 import { observeCopy } from "@/lib/product/client-security";
@@ -16,12 +16,21 @@ type Secret = {
   expires_at: string | null;
   rotate_at: string | null;
   updated_at: string;
+  project_id: string | null;
   projects: { name: string } | null;
   environments: { name: string } | null;
   services: { name: string } | null;
 };
 
-export function VaultClient({ secrets, projects }: { secrets: Secret[]; projects: Project[] }) {
+export function VaultClient({
+  secrets,
+  projects,
+  initialProjectId,
+}: {
+  secrets: Secret[];
+  projects: Project[];
+  initialProjectId?: string;
+}) {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Secret | null>(null);
@@ -31,8 +40,34 @@ export function VaultClient({ secrets, projects }: { secrets: Secret[]; projects
   const [message, setMessage] = useState("");
   const [pendingReveal, setPendingReveal] = useState<null | (() => Promise<void>)>(null);
   const [pending, start] = useTransition();
+  const [now] = useState(() => Date.now());
+  const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState(initialProjectId ?? "");
   const entries = useMemo(() => parseEnvFile(envText), [envText]);
   const first = projects[0];
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return secrets.filter((row) => {
+      if (projectFilter && row.project_id !== projectFilter) return false;
+      if (!q) return true;
+      const hay = [row.name, row.services?.name, row.projects?.name, row.environments?.name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [secrets, query, projectFilter]);
+
+  // Security state derived from real metadata only. Green = protected/encrypted,
+  // amber = attention (rotate/expiring), red = expired. Never reveals the value.
+  const DAY = 86_400_000;
+  function secretState(row: Secret): { label: string; cls: string } {
+    if (row.expires_at && new Date(row.expires_at).getTime() < now) return { label: "Expired", cls: "failed" };
+    if (row.rotate_at && new Date(row.rotate_at).getTime() < now) return { label: "Rotate due", cls: "warning" };
+    if (row.expires_at && new Date(row.expires_at).getTime() - now < 14 * DAY) return { label: "Expires soon", cls: "warning" };
+    return { label: "Encrypted", cls: "verified" };
+  }
 
   useEffect(() => {
     if (!Object.keys(revealed).length) return;
@@ -61,40 +96,64 @@ export function VaultClient({ secrets, projects }: { secrets: Secret[]; projects
 
   return (
     <>
-      <div className="segmented">
-        <button className="active">All Secrets</button>
-        <Link href="/app/projects">Projects</Link>
-        <Link href="/app/vault/authenticator">Authenticator</Link>
-        <Link href="/app/vault/recovery">Recovery Codes</Link>
-      </div>
-      <div className="data-surface">
-        <div className="data-toolbar">
-          <span>{secrets.length} secret{secrets.length === 1 ? "" : "s"}</span>
-          <div className="flex gap-2">
-            <button className="secondary-button" onClick={() => setEnvOpen(true)} disabled={!projects.length}><Upload />Import .env</button>
-            <button className="primary-button" onClick={() => setOpen(true)} disabled={!projects.length}><Plus />Add secret</button>
-          </div>
+      <div className="data-toolbar vault-toolbar">
+        <span>{visible.length} secret{visible.length === 1 ? "" : "s"}</span>
+        <input
+          className="vault-filter"
+          type="search"
+          placeholder="Filter secrets…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Filter secrets"
+        />
+        {projects.length > 1 ? (
+          <select
+            className="vault-project-filter"
+            aria-label="Filter by project"
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+          >
+            <option value="">All projects</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>{project.name}</option>
+            ))}
+          </select>
+        ) : null}
+        <Link className="quiet-link" href="/app/vault/recovery">Recovery</Link>
+        <div className="flex gap-2">
+          <button className="secondary-button" onClick={() => setEnvOpen(true)} disabled={!projects.length}><Upload />Import .env</button>
+          <button className="primary-button" onClick={() => setOpen(true)} disabled={!projects.length}><Plus />Add secret</button>
         </div>
-        {secrets.length === 0 ? (
-          <div className="empty-state">
-            <h2>No secrets yet.</h2>
-            <p>{projects.length ? "Add your first credential or import a .env file." : "Create a project before adding credentials."}</p>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Name</th><th>Service</th><th>Project / Environment</th><th>Updated</th><th></th></tr>
-              </thead>
-              <tbody>
-                {secrets.map((row) => (
+      </div>
+      {visible.length === 0 ? (
+        <div className="empty-state">
+          <h2>{secrets.length ? "No matching secrets." : "No secrets yet."}</h2>
+          <p>{projects.length ? "Add a credential or import a .env file." : "Create a project before adding credentials."}</p>
+        </div>
+      ) : (
+        <div className="table-wrap vault-table">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Service</th><th>Project / Environment</th><th>State</th><th>Updated</th><th></th></tr>
+            </thead>
+            <tbody>
+              {visible.map((row) => (
                   <tr key={row.id}>
                     <td>
                       <div className="secret-name">
                         <span className="service-mark">{row.services?.name?.[0] ?? "?"}</span>
                         <span>
                           <b>{row.name}</b>
-                          <code>{revealed[row.id] ?? "••••••••••••••••"}</code>
+                          <code className="secret-masked">
+                            {revealed[row.id] ? (
+                              revealed[row.id]
+                            ) : (
+                              <>
+                                <Lock aria-hidden="true" />
+                                ••••••••••••
+                              </>
+                            )}
+                          </code>
                         </span>
                       </div>
                     </td>
@@ -102,6 +161,12 @@ export function VaultClient({ secrets, projects }: { secrets: Secret[]; projects
                     <td>
                       {row.projects?.name ?? "Unassigned"}
                       <small>{row.environments?.name ?? "No environment"}</small>
+                    </td>
+                    <td>
+                      {(() => {
+                        const st = secretState(row);
+                        return <span className={`status ${st.cls} status-cell`}>{st.label}</span>;
+                      })()}
                     </td>
                     <td>{new Date(row.updated_at).toLocaleDateString()}</td>
                     <td>
@@ -138,10 +203,9 @@ export function VaultClient({ secrets, projects }: { secrets: Secret[]; projects
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+          </table>
+        </div>
+      )}
       {message ? <p className="security-note">{message}</p> : <p className="security-note">Values are decrypted only after password confirmation or MFA, and automatically hidden after 15 seconds.</p>}
 
       {open && first ? (

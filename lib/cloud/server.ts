@@ -1,13 +1,19 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { CLOUD_PLANS, type CloudPlan } from "@/lib/cloud/quota";
 import { highestCloudPlan, storageQuotaBytes } from "@/lib/billing/entitlements";
 
 export const MAX_FILE_BYTES = Number(process.env.CLOUD_MAX_FILE_BYTES ?? 5 * 1024 ** 3);
-export const MAX_UPLOAD_AUTHORIZATIONS_PER_MINUTE = 20;
+export {
+  MAX_UPLOAD_AUTHORIZATIONS_PER_MINUTE,
+  MAX_BATCH_AUTHORIZED_FILES_PER_MINUTE,
+  MAX_FILES_PER_AUTHORIZE_BATCH,
+  MAX_FILES_PER_FINALIZE_BATCH,
+} from "@/lib/cloud/limits";
 
-export async function getCurrentStorageUsage(workspaceId: string): Promise<number> {
-  const supabase = await createClient();
+export async function getCurrentStorageUsage(workspaceId: string, client?: SupabaseClient): Promise<number> {
+  const supabase = client ?? await createClient();
   const { data, error } = await supabase
     .from("cloud_files")
     .select("size_bytes")
@@ -18,8 +24,8 @@ export async function getCurrentStorageUsage(workspaceId: string): Promise<numbe
   return (data ?? []).reduce((sum, row) => sum + Number(row.size_bytes), 0);
 }
 
-export async function getStorageQuota(workspaceId: string): Promise<{ plan: CloudPlan; bytes: number }> {
-  const supabase = await createClient();
+export async function getStorageQuota(workspaceId: string, client?: SupabaseClient): Promise<{ plan: CloudPlan; bytes: number }> {
+  const supabase = client ?? await createClient();
   const { data } = await supabase
     .from("subscriptions")
     .select("cloud_plan,status,current_period_end")

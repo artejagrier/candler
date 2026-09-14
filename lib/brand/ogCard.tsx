@@ -19,7 +19,7 @@ export function renderBrandCard(): ImageResponse {
           justifyContent: "center",
           padding: 80,
           background:
-            "linear-gradient(135deg, #0c0722 0%, #1b0f3a 45%, #07070a 100%)",
+            "linear-gradient(135deg, #0c0722 0%, #1b0f3a 45%, #070709 100%)",
           fontFamily: "sans-serif",
           color: BRAND.white,
         }}
@@ -34,6 +34,7 @@ export function renderBrandCard(): ImageResponse {
               height: 96,
               borderRadius: 24,
               background: BRAND.purple,
+              boxShadow: `0 0 0 1px ${BRAND.purpleBright}, 0 24px 60px -12px rgba(124,255,79,0.35)`,
             }}
           >
             {/* next/og renders with Satori — a plain <img> is required here. */}
@@ -62,7 +63,7 @@ export function renderBrandCard(): ImageResponse {
           style={{
             marginTop: 28,
             fontSize: 30,
-            color: "#a3a1b5",
+            color: "#a2a2ae",
             maxWidth: 880,
           }}
         >

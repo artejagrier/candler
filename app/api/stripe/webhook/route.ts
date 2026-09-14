@@ -102,13 +102,13 @@ export async function POST(request: Request) {
         default:
           break;
       }
-    } catch (error) {
+    } catch {
       await admin.from("stripe_webhook_events").delete().eq("id", event.id);
-      throw error;
+      return safeErrorResponse("Webhook processing failed.", 500);
     }
 
     return Response.json({ received: true });
   } catch {
-    return safeErrorResponse("Invalid or unprocessable webhook.", 400);
+    return safeErrorResponse("Invalid webhook.", 400);
   }
 }

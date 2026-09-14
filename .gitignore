@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# accidental empty artifacts from npm/cli misfires
+/candler-dev@0.1.0
+
 # production
 /build
 

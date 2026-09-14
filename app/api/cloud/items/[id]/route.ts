@@ -2,8 +2,7 @@ import { z } from "zod";
 import { deleteObject } from "@/lib/cloud/storage";
 import { emitAuditEvent } from "@/lib/audit/events";
 import { safeErrorResponse } from "@/lib/security/redaction";
-import { requireCloudActor } from "@/lib/cloud/operations";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { requireCloudActor, descendantFolderIds } from "@/lib/cloud/operations";
 
 const patchSchema = z.object({
   kind: z.enum(["file", "folder"]),
@@ -11,20 +10,6 @@ const patchSchema = z.object({
   name: z.string().trim().min(1).max(512).optional(),
   parentId: z.uuid().nullable().optional(),
 });
-
-async function descendantFolderIds(admin: SupabaseClient, folderId: string, ownerId: string): Promise<string[]> {
-  const ids = [folderId];
-  const queue = [folderId];
-  while (queue.length) {
-    const current = queue.shift()!;
-    const { data } = await admin.from("cloud_folders").select("id").eq("parent_id", current).eq("owner_id", ownerId);
-    for (const row of data ?? []) {
-      ids.push(row.id);
-      queue.push(row.id);
-    }
-  }
-  return ids;
-}
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -61,7 +46,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (error) throw new Error();
 
     if (input.kind === "folder" && (input.action === "trash" || input.action === "restore")) {
-      const folderIds = await descendantFolderIds(admin, id, context.userId);
+      const folderIds = await descendantFolderIds(admin, id, context.userId, context.workspaceId);
       const childUpdate = input.action === "trash"
         ? { deleted_at: now, updated_at: now }
         : { deleted_at: null, updated_at: now };
@@ -124,7 +109,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         .not("deleted_at", "is", null)
         .maybeSingle();
       if (!folder) return safeErrorResponse("Trashed folder not found.", 404);
-      const folderIds = await descendantFolderIds(admin, id, context.userId);
+      const folderIds = await descendantFolderIds(admin, id, context.userId, context.workspaceId);
       const { data: files } = await admin.from("cloud_files").select("id,object_key").in("folder_id", folderIds).eq("owner_id", context.userId);
       for (const file of files ?? []) await deleteObject(file.object_key);
       await admin.from("cloud_files").delete().in("folder_id", folderIds).eq("owner_id", context.userId);

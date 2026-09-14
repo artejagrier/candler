@@ -12,10 +12,15 @@ test("launch path no longer ships mock project data", () => {
 });
 
 test("cloud upload authorization does not accept client plan or usage", () => {
-  const source = readFileSync(new URL("../app/api/cloud/upload/route.ts", import.meta.url), "utf8");
-  assert.equal(/usedBytes|plan/.test(source.split("const input")[1]?.split("export async")[0] ?? "usedBytes"), false);
-  assert.equal(source.includes("getCurrentStorageUsage"), true);
-  assert.equal(source.includes("getStorageQuota"), true);
+  const route = readFileSync(new URL("../app/api/cloud/upload/route.ts", import.meta.url), "utf8");
+  const batch = readFileSync(new URL("../app/api/cloud/upload/batch-authorize/route.ts", import.meta.url), "utf8");
+  const authorize = readFileSync(new URL("../lib/cloud/authorize.ts", import.meta.url), "utf8");
+  assert.equal(/usedBytes|plan/.test(route.split("const input")[1]?.split("export async")[0] ?? "usedBytes"), false);
+  assert.equal(authorize.includes("getCurrentStorageUsage"), true);
+  assert.equal(authorize.includes("getStorageQuota"), true);
+  assert.equal(authorize.includes("objectKey(context.userId, context.workspaceId, fileId)"), true);
+  assert.equal(batch.includes("requireCloudActor"), true);
+  assert.equal(batch.includes("uploadBatchInput"), true);
 });
 
 test("checkout derives workspace identity on the server", () => {
@@ -23,6 +28,8 @@ test("checkout derives workspace identity on the server", () => {
   assert.equal(source.includes("workspaceId: z.uuid()"), false);
   assert.equal(source.includes("getWorkspaceContext"), true);
   assert.equal(source.includes("mode: \"subscription\""), true);
+  assert.equal(source.includes("subscriptions.update"), true);
+  assert.equal(source.includes("isLiveSubscription"), true);
   assert.equal(/priceId|price: z/.test(source.split("const input")[1]?.split("export async")[0] ?? "priceId"), false);
 });
 
@@ -39,6 +46,8 @@ test("webhook verifies signatures and claims event ids", () => {
   assert.equal(source.includes("stripe-signature"), true);
   assert.equal(source.includes("stripe_webhook_events"), true);
   assert.equal(source.includes("23505"), true);
+  assert.equal(source.includes(".delete().eq(\"id\", event.id)"), true);
+  assert.equal(source.includes("500"), true);
 });
 
 test("launch pricing no longer ships retired Cloud add-on prices", () => {

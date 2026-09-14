@@ -79,7 +79,7 @@ export const INTEGRATIONS: Integration[] = [
     name: "GitHub",
     blurb: "Repositories, branches, and pull requests.",
     initial: "GH",
-    accent: "#e8e7ee",
+    accent: "#f7f7f8",
   },
   {
     name: "Vercel",
@@ -109,7 +109,7 @@ export const INTEGRATIONS: Integration[] = [
     name: "Linear",
     blurb: "Issues and cycles tied to each project.",
     initial: "L",
-    accent: "#d8b4fe",
+    accent: "#c4b5fd",
   },
 ];
 

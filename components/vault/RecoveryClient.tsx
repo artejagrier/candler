@@ -59,7 +59,20 @@ export function RecoveryClient({ sets }: { sets: Set[] }) {
                   <tr key={set.id}>
                     <td><b>{set.service}</b></td>
                     <td>{set.account_name}</td>
-                    <td>{remaining[set.id] ?? set.remaining_count} of {set.total_count}</td>
+                    <td>
+                      {(() => {
+                        const rem = remaining[set.id] ?? set.remaining_count;
+                        const pct = set.total_count ? (rem / set.total_count) * 100 : 0;
+                        return (
+                          <div className="remaining">
+                            <span>{rem} of {set.total_count} remaining</span>
+                            <div className="remaining-bar">
+                              <i style={{ width: `${pct}%` }} data-low={rem <= 2 ? "true" : undefined} />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td>{new Date(set.updated_at).toLocaleDateString()}</td>
                     <td>
                       <div className="row-actions">
@@ -79,7 +92,7 @@ export function RecoveryClient({ sets }: { sets: Set[] }) {
             <div className="recovery-reveal" key={id}>
               {codes.map((code, index) => (
                 <div key={index}>
-                  <code>{code ?? "Used"}</code>
+                  <code className={code ? undefined : "used"}>{code ?? "Used"}</code>
                   {code ? (
                     <>
                       <button onClick={() => {

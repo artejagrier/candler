@@ -15,20 +15,20 @@ export default function GlobalError({ reset }: { error: Error & { digest?: strin
           minHeight: "100vh",
           display: "grid",
           placeItems: "center",
-          background: "#07070a",
-          color: "#e8e7ee",
+          background: "#070709",
+          color: "#f7f7f8",
           fontFamily: "ui-sans-serif, system-ui, sans-serif",
           padding: "1.5rem",
         }}
       >
         <main style={{ maxWidth: "28rem", textAlign: "center" }}>
-          <p style={{ color: "#e9aed6", fontSize: ".72rem", letterSpacing: ".16em", textTransform: "uppercase", fontWeight: 600 }}>
+          <p style={{ color: "#c4b5fd", fontSize: ".72rem", letterSpacing: ".16em", textTransform: "uppercase", fontWeight: 600 }}>
             Something went wrong
           </p>
           <h1 style={{ color: "#fff", fontSize: "1.6rem", margin: "1rem 0" }}>
             Candler hit an unexpected error
           </h1>
-          <p style={{ color: "#a3a1b5", fontSize: ".9rem", lineHeight: 1.6 }}>
+          <p style={{ color: "#a2a2ae", fontSize: ".9rem", lineHeight: 1.6 }}>
             The page failed to render. Your data is safe. Try again, and if it keeps happening, contact support.
           </p>
           <button
@@ -40,7 +40,7 @@ export default function GlobalError({ reset }: { error: Error & { digest?: strin
               borderRadius: ".7rem",
               border: "none",
               background: "#fff",
-              color: "#09090d",
+              color: "#070709",
               fontWeight: 600,
               fontSize: ".85rem",
               cursor: "pointer",

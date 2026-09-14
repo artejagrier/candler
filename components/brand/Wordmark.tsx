@@ -55,7 +55,7 @@ export function Wordmark({
   return (
     <Link
       href={href}
-      aria-label={`${SITE.name} home`}
+      aria-label={href === "/app" ? `${SITE.name} Dashboard` : `${SITE.name} home`}
       className="inline-flex rounded-lg transition-opacity hover:opacity-90"
     >
       {content}

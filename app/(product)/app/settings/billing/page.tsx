@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { PageHeader } from "@/components/product/PageHeader";
 import { BillingClient } from "@/components/product/BillingClient";
 import { getWorkspaceData } from "@/lib/data/queries";
 import { getCurrentStorageUsage, getStorageQuota } from "@/lib/cloud/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { hasProEntitlement } from "@/lib/billing/entitlements";
+
+export const metadata: Metadata = { title: "Billing" };
 
 export default async function Billing() {
   const data = isSupabaseConfigured ? await getWorkspaceData() : null;
@@ -21,7 +24,7 @@ export default async function Billing() {
   );
   return (
     <>
-      <PageHeader eyebrow="Settings" title="Billing" description="Subscription state comes from verified Stripe webhooks, not the checkout redirect." />
+      <PageHeader eyebrow="Settings" title="Billing" description="Free 10 GB · Pro $18/mo 50 GB · Cloud 500 $29/mo · Cloud 1 TB $39/mo. Storage quota is the limit — not project count." />
       <BillingClient
         proActive={proActive}
         cloudPlan={quota.plan}

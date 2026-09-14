@@ -59,8 +59,14 @@ export function AuthenticatorClient({ entries }: { entries: Entry[] }) {
               <div key={entry.id}>
                 <span className="service-mark">{entry.issuer[0]}</span>
                 <p><b>{entry.issuer}</b><small>{entry.account_name}</small></p>
-                <code>{value?.code ? `${value.code.slice(0, 3)} ${value.code.slice(3)}` : "••• •••"}</code>
-                <span className="countdown">{value?.validFor ?? "—"}</span>
+                <code className="totp">{value?.code ? `${value.code.slice(0, 3)} ${value.code.slice(3)}` : "••• •••"}</code>
+                <span
+                  className={`countdown${value && value.validFor <= 5 ? " countdown--soon" : ""}`}
+                  style={{ ["--progress"]: `${((value?.validFor ?? 30) / 30) * 100}%` } as React.CSSProperties}
+                  aria-label={value ? `Refreshes in ${value.validFor} seconds` : "Loading code"}
+                >
+                  <b>{value?.validFor ?? "—"}</b>
+                </span>
                 <div className="row-actions">
                   <button
                     aria-label="Copy code"
