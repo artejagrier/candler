@@ -8,10 +8,18 @@ import { StepUpDialog } from "@/components/product/StepUpDialog";
 
 type Set = { id: string; service: string; account_name: string; total_count: number; remaining_count: number; updated_at: string };
 
-export function RecoveryClient({ sets }: { sets: Set[] }) {
+export function RecoveryClient({
+  sets,
+  initialService = "",
+  initialAccount = "",
+}: {
+  sets: Set[];
+  initialService?: string;
+  initialAccount?: string;
+}) {
   const [revealed, setRevealed] = useState<Record<string, (string | null)[]>>({});
   const [remaining, setRemaining] = useState<Record<string, number>>(Object.fromEntries(sets.map((set) => [set.id, set.remaining_count])));
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => Boolean(initialService));
   const [error, setError] = useState("");
   const [pendingReveal, setPendingReveal] = useState<null | (() => Promise<void>)>(null);
   const [pending, start] = useTransition();
@@ -143,8 +151,8 @@ export function RecoveryClient({ sets }: { sets: Set[] }) {
             }}
           >
             <h2>Add recovery codes</h2>
-            <label>Service<input name="service" required /></label>
-            <label>Account<input name="account" required /></label>
+            <label>Service<input name="service" required defaultValue={initialService} autoComplete="off" /></label>
+            <label>Account<input name="account" required defaultValue={initialAccount} autoComplete="off" /></label>
             <label>Codes, one per line<textarea name="codes" required autoComplete="off" /></label>
             <div>
               <button type="button" className="secondary-button" onClick={() => setOpen(false)}>Cancel</button>

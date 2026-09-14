@@ -14,8 +14,13 @@ export async function getWorkspaceData() {
     supabase.from("agent_conversations").select("id,title,project_id,created_at,updated_at").eq("workspace_id", context.workspaceId).order("updated_at", { ascending: false }),
     supabase.from("audit_events").select("id,event_type,target_type,target_id,metadata,created_at").eq("workspace_id", context.workspaceId).order("created_at", { ascending: false }).limit(20),
     supabase.from("subscriptions").select("product_key,status,current_period_end,storage_quota_bytes,entitlement_pro,cloud_plan,stripe_customer_id").eq("workspace_id", context.workspaceId).order("updated_at", { ascending: false }),
-    supabase.from("authenticator_entries").select("id,issuer,account_name,created_at,updated_at").eq("workspace_id", context.workspaceId).order("issuer"),
+    supabase.from("authenticator_entries").select("id,issuer,account_name,pinned,last_used_at,created_at,updated_at").eq("workspace_id", context.workspaceId).eq("owner_id", context.userId).order("issuer"),
     supabase.from("recovery_code_sets").select("id,service,account_name,total_count,remaining_count,created_at,updated_at").eq("workspace_id", context.workspaceId).order("updated_at", { ascending: false }),
   ]);
-  return { context, projects: projects.data ?? [], secrets: secrets.data ?? [], files: files.data ?? [], folders:folders.data??[], conversations: conversations.data ?? [], activity: activity.data ?? [], subscriptions: subscription.data ?? [], authenticators: authenticators.data ?? [], recovery: recovery.data ?? [] };
+  let authenticatorRows = authenticators.data ?? [];
+  if (authenticators.error) {
+    const fallback = await supabase.from("authenticator_entries").select("id,issuer,account_name,created_at,updated_at").eq("workspace_id", context.workspaceId).eq("owner_id", context.userId).order("issuer");
+    authenticatorRows = (fallback.data ?? []).map((row) => ({ ...row, pinned: false, last_used_at: null }));
+  }
+  return { context, projects: projects.data ?? [], secrets: secrets.data ?? [], files: files.data ?? [], folders:folders.data??[], conversations: conversations.data ?? [], activity: activity.data ?? [], subscriptions: subscription.data ?? [], authenticators: authenticatorRows, recovery: recovery.data ?? [] };
 }

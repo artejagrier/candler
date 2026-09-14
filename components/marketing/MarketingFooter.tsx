@@ -27,6 +27,8 @@ const FOOTER_LINKS: { heading: string; links: { label: string; href: string }[] 
       links: [
         { label: "Privacy", href: "/privacy" },
         { label: "Terms", href: "/terms" },
+        { label: "Acceptable Use", href: "/acceptable-use" },
+        { label: "Security", href: "/security" },
       ],
     },
   ];
@@ -66,7 +68,7 @@ export function MarketingFooter() {
 
       <div className="mx-auto mt-12 flex max-w-6xl flex-col items-start justify-between gap-3 border-t border-line pt-6 text-sm text-slate-muted sm:flex-row sm:items-center">
         <p>
-          © {SITE.name} — {SITE.domain}. The dynamic sky follows your local time.
+          © {SITE.name} — {SITE.domain}. Workspace modes stay put until you change them.
         </p>
         <p>Built with honest security. No fake encryption.</p>
       </div>

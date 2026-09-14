@@ -28,7 +28,7 @@ const VALUES = [
   {
     title: "Calm by design",
     description:
-      "A dynamic sky, a floating dock, and a command palette — an interface that feels alive without getting in your way.",
+      "A stable workspace, a floating dock, and a command palette — an interface that stays out of your way.",
     icon: Sparkles,
   },
   {

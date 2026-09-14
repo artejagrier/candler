@@ -39,7 +39,7 @@ export function WorkspacePlaceholder({
           {eyebrow}
         </p>
         {header ?? (
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             {title}
           </h1>
         )}
@@ -55,7 +55,7 @@ export function WorkspacePlaceholder({
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {zones.map((zone) => (
             <Surface key={zone.title} subtle className="p-5">
-              <h2 className="text-sm font-semibold text-white">{zone.title}</h2>
+              <h2 className="text-sm font-semibold text-foreground">{zone.title}</h2>
               <p className="mt-1.5 text-sm text-fog">{zone.note}</p>
               <div className="mt-4 space-y-2" aria-hidden="true">
                 <div className="h-2.5 w-3/4 rounded-full bg-white/6" />

@@ -11,12 +11,11 @@ export default async function AuthenticatorPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Security"
+        eyebrow="Candler Authenticator"
         title="Authenticator"
-        description="Encrypted TOTP seeds. Codes are generated on the server and never persist in the browser."
+        description="Your verification codes, protected by Candler."
       />
       <AuthenticatorClient entries={(data?.authenticators ?? []) as never[]} />
-      <p className="security-note">Seeds are decrypted only long enough to generate a code and are never returned to the browser.</p>
     </>
   );
 }

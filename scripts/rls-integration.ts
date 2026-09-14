@@ -136,13 +136,57 @@ try {
   const { data: secretReveal } = await b.from("secrets").select("ciphertext,iv,auth_tag").eq("workspace_id", workspace.id);
   assert.equal(secretReveal?.length, 0, "User B revealed User A ciphertext");
 
+  const { data: authenticatorReveal } = await b.from("authenticator_entries").select("seed_ciphertext,seed_iv,seed_auth_tag").eq("workspace_id", workspace.id);
+  assert.equal(authenticatorReveal?.length, 0, "User B revealed User A authenticator seed");
+
+  const { data: authenticatorMutation } = await b.from("authenticator_entries").update({ issuer: "stolen" }).eq("workspace_id", workspace.id).select("id");
+  assert.equal(authenticatorMutation?.length, 0, "User B mutated User A authenticator");
+
   const { data: mutation } = await b.from("projects").update({ name: "unauthorized" }).eq("id", project.id).select("id");
   assert.equal(mutation?.length, 0, "User B mutated User A project");
 
   const { data: billingMutation } = await b.from("subscriptions").update({ status: "active" }).eq("workspace_id", workspace.id).select("id");
   assert.equal(billingMutation?.length, 0, "User B mutated User A subscription");
 
-  console.log("RLS isolation PASS for projects, secrets, authenticator, recovery, cloud, Agent, audit, and subscriptions.");
+  const { data: clientConsentInsert, error: clientConsentError } = await a.from("legal_consents").insert({
+    user_id: userA.id,
+    terms_version: `rls-${suffix}`,
+    privacy_version: `rls-${suffix}`,
+    consent_source: "signup",
+  }).select("id");
+  assert.equal(clientConsentInsert?.length ?? 0, 0, "Authenticated clients must not insert legal consents");
+  assert.ok(clientConsentError);
+
+  if (admin) {
+    const { data: consentRow, error: consentInsertError } = await admin.from("legal_consents").insert({
+      user_id: userA.id,
+      terms_version: `rls-${suffix}`,
+      privacy_version: `rls-${suffix}`,
+      aup_version: `rls-${suffix}`,
+      consent_source: "signup",
+    }).select("id").single();
+    assert.ifError(consentInsertError);
+    assert(consentRow);
+
+    const { data: ownConsent } = await a.from("legal_consents").select("id,terms_version").eq("id", consentRow.id);
+    assert.equal(ownConsent?.length, 1, "User A reads own consent");
+
+    const { data: crossConsent } = await b.from("legal_consents").select("id").eq("user_id", userA.id);
+    assert.equal(crossConsent?.length, 0, "User B read User A legal consent");
+
+    const { data: consentUpdate } = await a.from("legal_consents").update({ terms_version: "tampered" }).eq("id", consentRow.id).select("id");
+    assert.equal(consentUpdate?.length, 0, "User A updated historical consent");
+
+    const { data: crossConsentUpdate } = await b.from("legal_consents").update({ terms_version: "tampered" }).eq("id", consentRow.id).select("id");
+    assert.equal(crossConsentUpdate?.length, 0, "User B updated User A consent");
+
+    const { data: consentDelete } = await a.from("legal_consents").delete().eq("id", consentRow.id).select("id");
+    assert.equal(consentDelete?.length, 0, "User A deleted historical consent");
+
+    await admin.from("legal_consents").delete().eq("id", consentRow.id);
+  }
+
+  console.log("RLS isolation PASS for projects, secrets, authenticator, recovery, cloud, Agent, audit, subscriptions, and legal consents.");
 } finally {
   if (admin) await admin.from("workspaces").delete().eq("id", workspace.id);
   else await a.from("workspaces").delete().eq("id", workspace.id);

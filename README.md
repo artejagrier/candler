@@ -40,7 +40,7 @@ Open http://localhost:3000. The workspace lives at `/dashboard`; press
 
 ```
 app/
-  layout.tsx            Root layout — fonts, metadata, SkyProvider, background
+  layout.tsx            Root layout — fonts, metadata, ThemeProvider, optional sky
   page.tsx              Phase 1A foundation landing (marketing landing → 1B)
   globals.css           Design tokens (@theme), base styles, glass utils, sky
   (workspace)/          Route group (no URL segment) sharing the AppShell
@@ -51,9 +51,9 @@ app/
 components/
   ui/                   Reusable primitives: Surface, Button, Input, Badge,
                         Modal, Kbd
-  sky/                  SkyBackground + dev-only SkyPreviewControl
+  sky/                  SkyBackground (opt-in environment modes only)
   navigation/           Dock, CommandPalette, CommandPaletteProvider
-  providers/            SkyProvider (time-of-day context)
+  providers/            SkyProvider (explicit environment override)
   layout/               AppShell (workspace chrome)
   workspace/            WorkspacePlaceholder, Greeting
   marketing/            FoundationPreview (design-system tour)
@@ -73,14 +73,13 @@ defined once as tokens in `app/globals.css` (`--color-ink`, `--color-purple`,
 `text-lavender`). Green/yellow/red appear **only** as restrained status colors,
 never decoration.
 
-### Dynamic time-of-day sky
+### Workspace appearance
 
-The background changes with the viewer's local time — **morning** (sunrise),
-**afternoon** (blue sky), **evening** (sunset), **night** (stars, subtle
-shooting star). It's pure CSS/gradients/SVG (no WebGL), transitions smoothly,
-and disables all motion under `prefers-reduced-motion`. In development a control
-(top-right) previews each period; a saved timezone preference will drive it
-later (plumbing in `lib/utilities/time.ts`).
+Default Burgundy is a stable, Vercel-like workspace: solid sidebar, clean
+surfaces, burgundy identity, neon-green actions. Optional **Special
+Environments** (Sunrise, Day, Sunset, Night) live in the Mode dropdown and
+apply only when chosen. They are not driven by local time. Night keeps the
+protected star field and flying star while that mode is active.
 
 ## Accessibility
 

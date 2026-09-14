@@ -5,11 +5,15 @@ import { useSky } from "@/components/providers/SkyProvider";
 /**
  * The atmospheric Candler background. Purely decorative (aria-hidden) and
  * non-interactive; all styling + motion (and reduced-motion handling) lives in
- * globals.css under `.sky`. Layers are always mounted; the active period is
- * driven by the `data-period` attribute so transitions are pure CSS.
+ * globals.css under `.sky`.
+ *
+ * Layers are mounted only while an environment mode is explicitly selected or
+ * previewed. Color modes render no sky, clouds, stars, or flying star.
  */
 export function SkyBackground() {
-  const { period } = useSky();
+  const { period, isActive } = useSky();
+
+  if (!isActive || !period) return null;
 
   return (
     <div className="sky" data-period={period} aria-hidden="true">

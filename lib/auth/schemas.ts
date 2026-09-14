@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LEGAL_ACCEPTANCE_MESSAGE } from "@/lib/legal/versions";
 
 /**
  * Shared auth validation. Used both client-side (React Hook Form resolver) and
@@ -34,6 +35,9 @@ export const signUpSchema = z
     email,
     password: strongPassword,
     confirmPassword: z.string(),
+    legalAccepted: z
+      .boolean()
+      .refine((value) => value === true, { message: LEGAL_ACCEPTANCE_MESSAGE }),
   })
   .refine((v) => v.password === v.confirmPassword, {
     message: "Passwords don't match",

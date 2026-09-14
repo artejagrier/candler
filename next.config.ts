@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
       { source: "/projects/:id", destination: "/app/projects/:id", permanent: true },
       { source: "/activity", destination: "/app/activity", permanent: true },
       { source: "/settings", destination: "/app/settings", permanent: true },
-      { source: "/security", destination: "/app/settings/security", permanent: true },
       { source: "/team", destination: "/app/settings", permanent: true },
       { source: "/integrations", destination: "/app/settings", permanent: true },
     ];

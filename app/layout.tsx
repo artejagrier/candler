@@ -1,10 +1,21 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
+import type { CSSProperties } from "react";
 
 import { SITE } from "@/config/site";
 import { SkyProvider } from "@/components/providers/SkyProvider";
 import { SkyBackground } from "@/components/sky/SkyBackground";
-import { SkyPreviewControl } from "@/components/sky/SkyPreviewControl";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import {
+  DEFAULT_MODE,
+  DEFAULT_SHADE,
+  MODE_COOKIE,
+  SHADE_COOKIE,
+  SKY_COOKIE,
+  THEME_COOKIE,
+} from "@/lib/theme/catalog";
+import { THEME_BOOT_SCRIPT, migrateStoredMode } from "@/lib/theme/storage";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -53,28 +64,41 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const jar = await cookies();
+  const appearance = migrateStoredMode({
+    mode: jar.get(MODE_COOKIE)?.value ?? "",
+    theme: jar.get(THEME_COOKIE)?.value ?? DEFAULT_MODE,
+    shade: jar.get(SHADE_COOKIE)?.value ?? DEFAULT_SHADE,
+    sky: jar.get(SKY_COOKIE)?.value ?? "",
+  });
+
   return (
-    // data-scroll-behavior lets Next.js keep navigation scroll snappy while we
-    // use smooth scrolling for in-page anchors (Next 16 no longer overrides by
-    // default). suppressHydrationWarning is unused — the sky derives its state
-    // from a stable SSR default, so no attribute mismatch occurs.
     <html
       lang="en"
       data-scroll-behavior="smooth"
+      data-mode={appearance.mode}
+      data-theme={appearance.mode}
+      data-theme-shade={appearance.shade}
+      data-scheme={appearance.scheme}
+      data-sky-period={appearance.skyPeriod ?? undefined}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      style={appearance.tokens as CSSProperties}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body className="min-h-full">
-        <SkyProvider>
-          <SkyBackground />
-          {children}
-          {/* Dev-only: preview each time-of-day without waiting for the clock.
-              Tree-shaken out of production builds. */}
-          {process.env.NODE_ENV !== "production" ? <SkyPreviewControl /> : null}
+        <SkyProvider initialOverride={appearance.skyPeriod}>
+          <ThemeProvider initialMode={appearance.mode} initialShade={appearance.shade}>
+            <SkyBackground />
+            {children}
+          </ThemeProvider>
         </SkyProvider>
       </body>
     </html>

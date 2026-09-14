@@ -4,13 +4,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Mail, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 
 import { signUpAction } from "@/lib/auth/actions";
 import { signUpSchema, type SignUpInput } from "@/lib/auth/schemas";
 import { FormStatus } from "@/components/auth/FormStatus";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { SubmitButton } from "@/components/auth/SubmitButton";
+import { LegalConsentField } from "@/components/legal/LegalConsentField";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
 
@@ -20,13 +21,21 @@ export function SignUpForm() {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<SignUpInput>({
     resolver: zodResolver(signUpSchema),
-    defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      legalAccepted: false,
+    },
   });
 
   const onSubmit = handleSubmit(async (values) => {
+    if (isSubmitting) return;
     setFormError(null);
     const result = await signUpAction(values);
     if (!result.ok) {
@@ -102,9 +111,30 @@ export function SignUpForm() {
         )}
       </FormField>
 
-      <SubmitButton pending={isSubmitting} pendingLabel="Creating account…">
-        Create account
-      </SubmitButton>
+      <Controller
+        name="legalAccepted"
+        control={control}
+        render={({ field }) => (
+          <>
+            <LegalConsentField
+              checked={Boolean(field.value)}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              inputRef={field.ref}
+              name={field.name}
+              error={errors.legalAccepted?.message}
+              disabled={isSubmitting}
+            />
+            <SubmitButton
+              pending={isSubmitting}
+              pendingLabel="Creating account…"
+              disabled={isSubmitting || !field.value}
+            >
+              Create account
+            </SubmitButton>
+          </>
+        )}
+      />
     </form>
   );
 }

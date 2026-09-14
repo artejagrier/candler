@@ -133,7 +133,7 @@ export const PRICING_TIERS: PricingTier[] = [
     features: [
       "10 GB Cloud storage",
       "Vault, projects, and environments",
-      "Command palette + dynamic sky",
+      "Command palette + workspace modes",
     ],
     cta: "Start for free",
     href: "/sign-up",
@@ -207,9 +207,9 @@ export const FAQ: FaqItem[] = [
       "Yes. Free includes 10 GB of Cloud storage. Paid launch plans are Candler Pro at $18/month for 50 GB, Pro + Cloud 500 at $29/month, and Pro + Cloud 1 TB at $39/month. Team pricing is not for sale yet.",
   },
   {
-    question: "What is the dynamic sky?",
+    question: "What are Special Environments?",
     answer:
-      "Candler's background shifts with your local time of day — morning, afternoon, evening, and night — so your workspace feels alive without getting in the way of the work.",
+      "Sunrise, Day, Sunset, and Night are optional workspace modes. They stay off until you choose one in Appearance. Color modes such as Burgundy stay visually stable and do not follow the time of day.",
   },
 ];
 

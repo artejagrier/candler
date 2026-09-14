@@ -19,7 +19,7 @@ export function renderBrandCard(): ImageResponse {
           justifyContent: "center",
           padding: 80,
           background:
-            "linear-gradient(135deg, #0c0722 0%, #1b0f3a 45%, #070709 100%)",
+            "linear-gradient(135deg, #3B0A1E 0%, #54102A 45%, #070709 100%)",
           fontFamily: "sans-serif",
           color: BRAND.white,
         }}

@@ -6,9 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext, requireProjectAccess } from "@/lib/data/workspace";
 import { encryptSecret } from "@/lib/security/encryption";
 import { emitAuditEvent } from "@/lib/audit/events";
-import { parseOtpAuthUri } from "@/lib/vault/totp";
+import { AUTHENTICATOR_BAD_KEY, AUTHENTICATOR_UNREADABLE, AUTHENTICATOR_UNSUPPORTED, parseTotpSetup } from "@/lib/vault/otpauth";
+import { totpSeedFingerprint } from "@/lib/vault/authenticator-fingerprint";
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+export type AuthenticatorAddResult =
+  | { ok: true; data: { id: string } }
+  | { ok: false; error: string; code?: "DUPLICATE"; existingId?: string };
 const uuid = z.uuid();
 const name = z.string().trim().min(1).max(120);
 function encryptedColumns(value: string, prefix = "") {
@@ -31,9 +35,107 @@ export async function deleteSecretAction(id:string):Promise<Result>{try{uuid.par
 
 export async function importEnvAction(raw:{projectId:string;environmentId:string;entries:{name:string;value:string;serviceName:string}[]}):Promise<Result<{created:number;duplicates:string[]}>>{try{const input=z.object({projectId:uuid,environmentId:uuid,entries:z.array(z.object({name, value:z.string().min(1).max(65536),serviceName:z.string().min(1).max(80)})).min(1).max(200)}).parse(raw),access=await requireProjectAccess(input.projectId),supabase=await createClient();const{data:existing}=await supabase.from("secrets").select("name").eq("project_id",input.projectId).eq("environment_id",input.environmentId).in("name",input.entries.map(e=>e.name));const duplicates=(existing??[]).map(x=>x.name),selected=input.entries.filter(x=>!duplicates.includes(x.name));for(const entry of selected){const serviceId=await resolveService(input.projectId,access.workspaceId,entry.serviceName);const{error}=await supabase.from("secrets").insert({workspace_id:access.workspaceId,owner_id:access.userId,project_id:input.projectId,environment_id:input.environmentId,service_id:serviceId,name:entry.name,...encryptedColumns(entry.value)});if(error)throw new Error(`Import stopped at ${entry.name}.`);}await emitAuditEvent({workspaceId:access.workspaceId,actorId:access.userId,eventType:"secret.env_imported",targetType:"project",targetId:input.projectId,metadata:{created:selected.length,duplicates:duplicates.length,environmentId:input.environmentId}});revalidatePath("/app/vault");return{ok:true,data:{created:selected.length,duplicates}};}catch(e){return fail(e)}}
 
-export async function addAuthenticatorAction(raw:{uri:string;issuer?:string;accountName?:string}):Promise<Result>{try{const parsed=parseOtpAuthUri(raw.uri),context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const issuer=name.parse(raw.issuer||parsed.issuer),account=name.parse(raw.accountName||parsed.label.split(":").at(-1)||parsed.label),supabase=await createClient();const{data,error}=await supabase.from("authenticator_entries").insert({workspace_id:context.workspaceId,owner_id:context.userId,issuer,account_name:account,...encryptedColumns(parsed.secret,"seed")}).select("id").single();if(error||!data)throw new Error("Authenticator could not be saved.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"authenticator.created",targetType:"authenticator",targetId:data.id,metadata:{issuer,account}});revalidatePath("/app/vault/authenticator");return{ok:true};}catch(e){return fail(e)}}
-export async function renameAuthenticatorAction(id:string,issuer:string,accountName:string):Promise<Result>{try{uuid.parse(id);const context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{error}=await supabase.from("authenticator_entries").update({issuer:name.parse(issuer),account_name:name.parse(accountName),updated_at:new Date().toISOString()}).eq("id",id).eq("owner_id",context.userId);if(error)throw new Error("Authenticator could not be renamed.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"authenticator.updated",targetType:"authenticator",targetId:id,metadata:{issuer}});revalidatePath("/app/vault/authenticator");return{ok:true};}catch(e){return fail(e)}}
-export async function deleteAuthenticatorAction(id:string):Promise<Result>{try{uuid.parse(id);const context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{data}=await supabase.from("authenticator_entries").delete().eq("id",id).eq("owner_id",context.userId).select("issuer").maybeSingle();if(!data)throw new Error("Authenticator not found.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"authenticator.deleted",targetType:"authenticator",targetId:id,metadata:{issuer:data.issuer}});revalidatePath("/app/vault/authenticator");return{ok:true};}catch(e){return fail(e)}}
+export async function addAuthenticatorAction(raw:{uri?:string;secret?:string;issuer?:string;accountName?:string}):Promise<AuthenticatorAddResult>{
+  try {
+    const parsed = parseTotpSetup({ uri: raw.uri, secret: raw.secret, accountName: raw.issuer || raw.accountName });
+    const context = await getWorkspaceContext();
+    if (!context) throw new Error("Workspace unavailable.");
+    const issuer = name.parse(raw.issuer?.trim() || parsed.issuer);
+    const account = name.parse(raw.accountName?.trim() || parsed.accountName);
+    const fingerprint = totpSeedFingerprint(parsed.secret);
+    const supabase = await createClient();
+    const lookup = await supabase
+      .from("authenticator_entries")
+      .select("id")
+      .eq("owner_id", context.userId)
+      .eq("seed_fingerprint", fingerprint)
+      .maybeSingle();
+    if (!lookup.error && lookup.data) {
+      return { ok: false, error: "This account is already in Candler.", code: "DUPLICATE", existingId: lookup.data.id };
+    }
+    let { data, error } = await supabase.from("authenticator_entries").insert({
+      workspace_id: context.workspaceId,
+      owner_id: context.userId,
+      issuer,
+      account_name: account,
+      seed_fingerprint: fingerprint,
+      ...encryptedColumns(parsed.secret, "seed"),
+    }).select("id").single();
+    if (error && /seed_fingerprint/i.test(error.message ?? "")) {
+      ({ data, error } = await supabase.from("authenticator_entries").insert({
+        workspace_id: context.workspaceId,
+        owner_id: context.userId,
+        issuer,
+        account_name: account,
+        ...encryptedColumns(parsed.secret, "seed"),
+      }).select("id").single());
+    }
+    if (error?.code === "23505") {
+      const { data: raced } = await supabase
+        .from("authenticator_entries")
+        .select("id")
+        .eq("owner_id", context.userId)
+        .eq("seed_fingerprint", fingerprint)
+        .maybeSingle();
+      if (raced) {
+        return { ok: false, error: "This account is already in Candler.", code: "DUPLICATE", existingId: raced.id };
+      }
+    }
+    if (error || !data) throw new Error("This account could not be saved. Try again.");
+    await emitAuditEvent({
+      workspaceId: context.workspaceId,
+      actorId: context.userId,
+      eventType: "authenticator.created",
+      targetType: "authenticator",
+      targetId: data.id,
+      metadata: { issuer, account },
+    });
+    revalidatePath("/app/vault/authenticator");
+    return { ok: true, data: { id: data.id } };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "";
+    if (
+      message === AUTHENTICATOR_UNREADABLE ||
+      message === AUTHENTICATOR_UNSUPPORTED ||
+      message === AUTHENTICATOR_BAD_KEY ||
+      message.startsWith("Enter an account name")
+    ) {
+      return { ok: false, error: message };
+    }
+    return { ok: false, error: e instanceof Error ? e.message : "The operation could not be completed." };
+  }
+}
+export async function renameAuthenticatorAction(id:string,issuer:string,accountName:string):Promise<Result>{try{uuid.parse(id);const context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{error}=await supabase.from("authenticator_entries").update({issuer:name.parse(issuer),account_name:name.parse(accountName),updated_at:new Date().toISOString()}).eq("id",id).eq("workspace_id",context.workspaceId).eq("owner_id",context.userId);if(error)throw new Error("Authenticator could not be renamed.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"authenticator.updated",targetType:"authenticator",targetId:id,metadata:{issuer}});revalidatePath("/app/vault/authenticator");return{ok:true};}catch(e){return fail(e)}}
+export async function deleteAuthenticatorAction(id:string):Promise<Result>{try{uuid.parse(id);const context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{data}=await supabase.from("authenticator_entries").delete().eq("id",id).eq("workspace_id",context.workspaceId).eq("owner_id",context.userId).select("issuer").maybeSingle();if(!data)throw new Error("Authenticator not found.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"authenticator.deleted",targetType:"authenticator",targetId:id,metadata:{issuer:data.issuer}});revalidatePath("/app/vault/authenticator");return{ok:true};}catch(e){return fail(e)}}
+export async function setAuthenticatorPinnedAction(id:string,pinned:boolean):Promise<Result>{
+  try {
+    uuid.parse(id);
+    const context = await getWorkspaceContext();
+    if (!context) throw new Error("Workspace unavailable.");
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("authenticator_entries")
+      .update({ pinned, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("workspace_id", context.workspaceId)
+      .eq("owner_id", context.userId)
+      .select("id")
+      .maybeSingle();
+    if (error || !data) throw new Error("This account could not be updated.");
+    await emitAuditEvent({
+      workspaceId: context.workspaceId,
+      actorId: context.userId,
+      eventType: "authenticator.updated",
+      targetType: "authenticator",
+      targetId: id,
+      metadata: { pinned },
+    });
+    revalidatePath("/app/vault/authenticator");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
 
 export async function createRecoverySetAction(raw:{service:string;accountName:string;codes:string[]}):Promise<Result>{try{const input=z.object({service:name,accountName:name,codes:z.array(z.string().trim().min(1).max(500)).min(1).max(100)}).parse(raw),context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const unique=[...new Set(input.codes)],supabase=await createClient();const{data,error}=await supabase.from("recovery_code_sets").insert({workspace_id:context.workspaceId,owner_id:context.userId,service:input.service,account_name:input.accountName,total_count:unique.length,remaining_count:unique.length,...encryptedColumns(JSON.stringify(unique),"codes")}).select("id").single();if(error||!data)throw new Error("Recovery codes could not be stored.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"recovery.created",targetType:"recovery_set",targetId:data.id,metadata:{service:input.service,account:input.accountName,total:unique.length}});revalidatePath("/app/vault/recovery");return{ok:true};}catch(e){return fail(e)}}
 export async function deleteRecoverySetAction(id:string):Promise<Result>{try{uuid.parse(id);const context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{data}=await supabase.from("recovery_code_sets").delete().eq("id",id).eq("owner_id",context.userId).select("service").maybeSingle();if(!data)throw new Error("Recovery set not found.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"recovery.deleted",targetType:"recovery_set",targetId:id,metadata:{service:data.service}});revalidatePath("/app/vault/recovery");return{ok:true};}catch(e){return fail(e)}}

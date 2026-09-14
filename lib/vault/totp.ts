@@ -1,5 +1,12 @@
 import { createHmac } from "node:crypto";
 
+export {
+  parseOtpAuthUri,
+  parseTotpSetup,
+  authenticatorSetupError,
+  type ParsedTotpSetup,
+} from "./otpauth";
+
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 function decodeBase32(value: string): Buffer {
@@ -23,13 +30,4 @@ export function generateTotp(seed: string, timestamp = Date.now(), period = 30, 
   const offset = digest[digest.length - 1] & 15;
   const code = (digest.readUInt32BE(offset) & 0x7fffffff) % 10 ** digits;
   return code.toString().padStart(digits, "0");
-}
-
-export function parseOtpAuthUri(uri: string) {
-  const parsed = new URL(uri);
-  if (parsed.protocol !== "otpauth:" || parsed.hostname !== "totp") throw new Error("Only TOTP otpauth URIs are supported.");
-  const secret = parsed.searchParams.get("secret");
-  if (!secret) throw new Error("TOTP URI is missing a seed.");
-  const label = decodeURIComponent(parsed.pathname.slice(1));
-  return { secret, label, issuer: parsed.searchParams.get("issuer") ?? label.split(":")[0] ?? "" };
 }

@@ -38,7 +38,7 @@ interface StaticCommand {
 const ACTIONS: StaticCommand[] = [
   { id: "a-project", label: "Create project", hint: "Start a new project", icon: Plus, href: "/app/projects", keywords: ["new", "add"] },
   { id: "a-secret", label: "Add a secret", hint: "Store an encrypted credential", icon: KeyRound, href: "/app/vault", keywords: ["key", "token", "env", "credential"] },
-  { id: "a-auth", label: "Add authenticator", hint: "Set up a TOTP entry", icon: ShieldCheck, href: "/app/vault/authenticator", keywords: ["totp", "2fa", "otp", "mfa"] },
+  { id: "a-auth", label: "Add authenticator", hint: "Scan a QR code or enter a setup key", icon: ShieldCheck, href: "/app/vault/authenticator", keywords: ["totp", "2fa", "otp", "mfa"] },
   { id: "a-upload", label: "Upload to Cloud", hint: "Back up files and project folders", icon: Upload, href: "/app/cloud", keywords: ["file", "folder", "backup"] },
   { id: "a-agent", label: "Ask Candler", hint: "Query your projects and health", icon: Bot, href: "/app/agent", keywords: ["ai", "assistant", "chat"] },
 ];

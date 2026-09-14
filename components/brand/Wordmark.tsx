@@ -20,8 +20,9 @@ interface WordmarkProps {
 }
 
 /**
- * The Candler wordmark: a purple glass shield + "Candler.dev". Shared by the
- * marketing header, footer, and every auth screen so the brand stays identical.
+ * Canonical Candler wordmark: burgundy shield + neon-green check. The mark is
+ * never recolored by the workspace theme; surrounding type uses foreground
+ * tokens so it stays readable on light and dark surfaces.
  */
 export function Wordmark({
   size = "md",
@@ -33,18 +34,13 @@ export function Wordmark({
 
   const content = (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <span
-        className={cn(
-          "flex items-center justify-center bg-purple shadow-glow-sm",
-          s.box,
-        )}
-      >
-        <ShieldCheck className={cn(s.icon, "text-white")} aria-hidden="true" />
+      <span className={cn("wordmark-mark flex items-center justify-center", s.box)}>
+        <ShieldCheck className={cn(s.icon, "wordmark-glyph")} aria-hidden="true" />
       </span>
       {!markOnly ? (
-        <span className={cn("font-semibold tracking-tight text-white", s.text)}>
+        <span className={cn("wordmark-name font-semibold tracking-tight", s.text)}>
           {SITE.name}
-          <span className="text-lavender">.dev</span>
+          <span className="wordmark-tld">.dev</span>
         </span>
       ) : null}
     </span>

@@ -1,6 +1,7 @@
 import { getWorkspaceContext } from "@/lib/data/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { decryptSecret, type EncryptedValue } from "@/lib/security/encryption";
+import { totpSeedFingerprint } from "@/lib/vault/authenticator-fingerprint";
 import { generateTotp } from "@/lib/vault/totp";
 import { safeErrorResponse } from "@/lib/security/redaction";
 
@@ -11,7 +12,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   const supabase = await createClient();
   const { data } = await supabase
     .from("authenticator_entries")
-    .select("id,seed_ciphertext,seed_iv,seed_auth_tag,key_version")
+    .select("id,seed_ciphertext,seed_iv,seed_auth_tag,key_version,seed_fingerprint")
     .eq("id", id)
     .eq("workspace_id", context.workspaceId)
     .eq("owner_id", context.userId)
@@ -25,6 +26,14 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       keyVersion: data.key_version,
       algorithm: "aes-256-gcm",
     } as EncryptedValue);
+    if (!data.seed_fingerprint) {
+      await supabase
+        .from("authenticator_entries")
+        .update({ seed_fingerprint: totpSeedFingerprint(seed) })
+        .eq("id", id)
+        .eq("workspace_id", context.workspaceId)
+        .eq("owner_id", context.userId);
+    }
     const now = Date.now();
     const code = generateTotp(seed, now);
     return Response.json(

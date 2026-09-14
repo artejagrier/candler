@@ -28,7 +28,6 @@ const PROTECTED_PREFIXES = [
   "/integrations",
   "/activity",
   "/team",
-  "/security",
   "/settings",
 ] as const;
 

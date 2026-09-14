@@ -1,7 +1,9 @@
 /**
- * Time-of-day helpers for the dynamic Candler sky.
+ * Time-of-day helpers for greetings and the protected environment palettes.
  *
- * The period drives the atmospheric background. Ranges follow the product spec:
+ * Workspace appearance does not follow these ranges automatically. Sunrise,
+ * Day, Sunset, and Night activate only when the user selects that Mode.
+ * Ranges remain the protected sky contract:
  *   morning    05:00–11:59
  *   afternoon  12:00–16:59
  *   evening    17:00–19:59
@@ -34,12 +36,12 @@ export function periodForHour(hour: number): SkyPeriod {
 }
 
 /**
- * Current period for a given date (defaults to now).
+ * Current period for a given date (defaults to now). Used for greeting copy,
+ * not for automatically switching workspace environment modes.
  *
- * A `timeZone` (IANA name, e.g. "Africa/Nairobi") can be supplied to honour a
- * saved preference; when omitted we use the runtime's local time. We resolve the
- * hour through `Intl.DateTimeFormat` so the timezone override is respected
- * without pulling in a date library.
+ * A `timeZone` (IANA name, e.g. "Africa/Nairobi") can be supplied; when omitted
+ * we use the runtime's local time. We resolve the hour through
+ * `Intl.DateTimeFormat` so a timezone override is respected without a date library.
  */
 export function currentPeriod(date: Date = new Date(), timeZone?: string): SkyPeriod {
   let hour = date.getHours();
@@ -62,8 +64,8 @@ export function currentPeriod(date: Date = new Date(), timeZone?: string): SkyPe
 }
 
 /**
- * Milliseconds until the next period boundary, so the sky can re-evaluate at
- * exactly the right moment instead of polling on a tight interval.
+ * Milliseconds until the next period boundary. Kept for the protected sky
+ * contract; the workspace no longer auto-ticks environments from local time.
  */
 export function msUntilNextPeriod(date: Date = new Date()): number {
   const boundaries = [5, 12, 17, 20]; // period start hours

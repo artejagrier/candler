@@ -15,6 +15,7 @@ const LABELS: Record<string, string> = {
   "authenticator.updated": "Authenticator updated",
   "authenticator.deleted": "Authenticator removed",
   "authenticator.code_copied": "Authenticator code copied",
+  "authenticator.seed_revealed": "Authenticator setup key revealed",
   "recovery.created": "Recovery codes stored",
   "recovery.deleted": "Recovery codes removed",
   "recovery.revealed": "Recovery codes revealed",
@@ -39,6 +40,7 @@ export function activityKind(eventType: string) {
   switch (root) {
     case "secret":
     case "authenticator":
+      return "Authenticator";
     case "recovery":
       return "Vault";
     case "cloud":

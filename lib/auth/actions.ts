@@ -29,6 +29,7 @@ import {
   regenerateRecoveryCodes,
   verifyAndConsumeRecoveryCode,
 } from "@/lib/auth/recovery-codes";
+import { recordLegalConsent } from "@/lib/legal/consent";
 
 /** Discriminated result every action returns to its form. */
 export type ActionResult =
@@ -93,6 +94,13 @@ export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
     },
   });
   if (error) return { ok: false, error: error.message };
+
+  if (data.user?.id) {
+    const consent = await recordLegalConsent({ userId: data.user.id, source: "signup" });
+    if (!consent.ok) {
+      // Account exists. Do not invent a consent row. Re-consent will run after sign-in.
+    }
+  }
 
   // A confirmed session means email verification is disabled (dev); otherwise
   // the user must confirm via the emailed link.

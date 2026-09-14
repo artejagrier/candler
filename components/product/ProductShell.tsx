@@ -10,6 +10,7 @@ import { Wordmark } from "@/components/brand/Wordmark";
 import { AccountMenu } from "@/components/product/AccountMenu";
 import { NotificationsMenu } from "@/components/product/NotificationsMenu";
 import { CommandPalette } from "@/components/product/CommandPalette";
+import { ModeSelect } from "@/components/theme/ThemeSelect";
 import { useDialogA11y } from "@/hooks/useDialogA11y";
 import { cn } from "@/lib/utilities/cn";
 
@@ -29,7 +30,7 @@ function crumb(pathname: string, projectName?: string) {
   if (pathname === "/app") return "Dashboard";
   if (pathname.startsWith("/app/projects/") && projectName) return `Projects / ${projectName}`;
   if (pathname === "/app/projects") return "Projects";
-  if (pathname.startsWith("/app/vault/authenticator")) return projectName ? `${projectName} / Authenticator` : "Authenticator";
+  if (pathname.startsWith("/app/vault/authenticator")) return "Authenticator";
   if (pathname.startsWith("/app/vault/recovery")) return "Vault / Recovery";
   if (pathname.startsWith("/app/vault")) return projectName ? `${projectName} / Vault` : "Vault";
   if (pathname.startsWith("/app/cloud")) return projectName ? `${projectName} / Cloud` : "Cloud";
@@ -275,7 +276,10 @@ function Sidebar({
       ) : null}
       <nav className="app-sidebar-footer" aria-label="Account">
         {SIDEBAR_FOOTER.map((item) => (
-          <SideLink key={`${item.href}-${item.label}`} pathname={pathname} item={item} />
+          <span key={`${item.href}-${item.label}`} className="app-sidebar-footer-item">
+            <SideLink pathname={pathname} item={item} />
+            {item.label === "Settings" ? <ModeSelect compact /> : null}
+          </span>
         ))}
       </nav>
     </aside>
@@ -389,7 +393,10 @@ function MobileDrawer({
         </div>
         <nav aria-label="Primary">
           {items.map((item) => (
-            <SideLink key={`${item.href}-${item.label}`} pathname={pathname} item={item} onNavigate={onClose} />
+            <span key={`${item.href}-${item.label}`} className="app-sidebar-footer-item">
+              <SideLink pathname={pathname} item={item} onNavigate={onClose} />
+              {item.label === "Settings" ? <ModeSelect compact /> : null}
+            </span>
           ))}
         </nav>
         {projectId && projectName ? (

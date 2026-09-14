@@ -13,14 +13,18 @@ export function shieldDataUri(stroke: string = "#ffffff", check: string = "#7cff
 }
 
 /**
- * Brand palette constants for image generation. Mirrors the app tokens in
- * globals.css: Electric Purple (intelligence) + Neon Green (action/protection).
+ * Canonical logo palette for image generation. Burgundy + neon green — not
+ * remapped when a user picks a workspace theme.
  */
 export const BRAND = {
-  purple: "#8b5cf6",
-  purpleBright: "#a855f7",
-  purpleDeep: "#4c1d95",
-  lavender: "#c4b5fd",
+  burgundy: "#8B1E4A",
+  burgundyBright: "#9C2457",
+  burgundyDeep: "#3B0A1E",
+  rose: "#C84B7A",
+  purple: "#8B1E4A",
+  purpleBright: "#9C2457",
+  purpleDeep: "#3B0A1E",
+  lavender: "#C84B7A",
   green: "#7cff4f",
   greenBright: "#b7ff2a",
   ink: "#070709",

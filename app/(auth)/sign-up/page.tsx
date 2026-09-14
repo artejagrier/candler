@@ -30,17 +30,6 @@ export default function SignUpPage() {
     >
       <AuthConfigNotice />
       <SignUpForm />
-      <p className="mt-4 text-center text-xs text-slate-muted">
-        By creating an account you agree to our{" "}
-        <Link href="/terms" className="text-fog hover:text-mist">
-          Terms
-        </Link>{" "}
-        and{" "}
-        <Link href="/privacy" className="text-fog hover:text-mist">
-          Privacy Policy
-        </Link>
-        .
-      </p>
     </AuthCard>
   );
 }

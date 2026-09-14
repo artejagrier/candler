@@ -3,63 +3,45 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from "react";
 
-import {
-  currentPeriod,
-  msUntilNextPeriod,
-  type SkyPeriod,
-} from "@/lib/utilities/time";
+import type { SkyPeriod } from "@/lib/utilities/time";
 
 interface SkyContextValue {
-  /** The period currently driving the background. */
-  period: SkyPeriod;
-  /** Whether the period is auto (from local time) or manually overridden. */
-  isOverridden: boolean;
-  /** Force a period (dev preview + future saved preference). Pass null to clear. */
+  /** Explicit environment period, or null when a standard color mode is active. */
+  period: SkyPeriod | null;
+  /** True only while Sunrise / Day / Sunset / Night is selected or previewed. */
+  isActive: boolean;
+  /** Drive the protected sky from the Mode system. Pass null to unmount it. */
   setOverride: (period: SkyPeriod | null) => void;
 }
 
 const SkyContext = createContext<SkyContextValue | null>(null);
 
 /**
- * Provides the current time-of-day period to the app.
+ * Holds the explicit environment period for the protected sky.
  *
- * SSR/first render uses a stable `"night"` default (dark, matches the app
- * chrome, so there's no bright flash) and switches to the real local period
- * after mount — this keeps hydration deterministic. It re-evaluates exactly at
- * the next period boundary rather than polling.
- *
- * A future settings screen can pass a saved IANA timezone; the plumbing lives
- * in `currentPeriod(date, timeZone)`.
+ * Color modes never inherit a local-time sky. The atmosphere mounts only when
+ * ThemeProvider sets an override for Sunrise, Day, Sunset, or Night.
  */
-export function SkyProvider({ children }: { children: React.ReactNode }) {
-  const [autoPeriod, setAutoPeriod] = useState<SkyPeriod>("night");
-  const [override, setOverride] = useState<SkyPeriod | null>(null);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-
-    const tick = () => {
-      setAutoPeriod(currentPeriod());
-      // Re-evaluate right when the next period begins.
-      timer = setTimeout(tick, msUntilNextPeriod());
-    };
-
-    tick();
-    return () => clearTimeout(timer);
-  }, []);
+export function SkyProvider({
+  children,
+  initialOverride = null,
+}: {
+  children: React.ReactNode;
+  initialOverride?: SkyPeriod | null;
+}) {
+  const [override, setOverride] = useState<SkyPeriod | null>(initialOverride);
 
   const value = useMemo<SkyContextValue>(
     () => ({
-      period: override ?? autoPeriod,
-      isOverridden: override !== null,
+      period: override,
+      isActive: override !== null,
       setOverride,
     }),
-    [override, autoPeriod],
+    [override],
   );
 
   return <SkyContext.Provider value={value}>{children}</SkyContext.Provider>;

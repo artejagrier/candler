@@ -123,7 +123,7 @@ export function Modal({
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 id={titleId} className="text-lg font-semibold text-white">
+            <h2 id={titleId} className="text-lg font-semibold text-foreground">
               {title}
             </h2>
             {description ? (
@@ -136,7 +136,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex size-8 shrink-0 items-center justify-center rounded-full text-fog transition-colors hover:bg-white/8 hover:text-white"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full text-fog transition-colors hover:bg-white/8 hover:text-foreground"
           >
             <X className="size-4" aria-hidden="true" />
           </button>

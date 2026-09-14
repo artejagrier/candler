@@ -3,7 +3,7 @@ import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 
 /**
  * Marketing route-group shell: responsive header + footer over the shared
- * dynamic sky. No workspace dock or command palette here.
+ * workspace background. No workspace dock or command palette here.
  */
 export default function MarketingLayout({
   children,
