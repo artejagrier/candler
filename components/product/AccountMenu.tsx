@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { ACCOUNT_MENU } from "@/config/product";
 import { signOutAction } from "@/lib/auth/actions";
@@ -44,13 +45,20 @@ export function AccountMenu({ userName, workspaceName }: { userName: string; wor
           ))}
           <div className="app-menu-sep" role="separator" />
           <form action={signOutAction}>
-            <button type="submit" role="menuitem" className="app-menu-danger">
-              <LogOut aria-hidden="true" />
-              Sign out
-            </button>
+            <SignOutMenuItem />
           </form>
         </div>
       ) : null}
     </div>
+  );
+}
+
+function SignOutMenuItem() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" role="menuitem" className="app-menu-danger" disabled={pending}>
+      <LogOut aria-hidden="true" />
+      {pending ? "Signing out…" : "Sign out"}
+    </button>
   );
 }

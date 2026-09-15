@@ -11,6 +11,7 @@ import { signInAction } from "@/lib/auth/actions";
 import { AUTH_ROUTES } from "@/lib/auth/routes";
 import { signInSchema, type SignInInput } from "@/lib/auth/schemas";
 import { FormStatus } from "@/components/auth/FormStatus";
+import { SignInOAuthButtons } from "@/components/auth/OAuthButtons";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { SubmitButton } from "@/components/auth/SubmitButton";
 import { FormField } from "@/components/ui/FormField";
@@ -29,6 +30,7 @@ export function SignInForm({ next }: { next?: string }) {
   });
 
   const onSubmit = handleSubmit(async (values) => {
+    if (isSubmitting) return;
     setFormError(null);
     const result = await signInAction(values, next);
     if (!result.ok) {
@@ -43,11 +45,12 @@ export function SignInForm({ next }: { next?: string }) {
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-2">
-        <a className="secondary-button" href={`/auth/oauth?provider=github&next=${encodeURIComponent(next ?? "/app")}`}>GitHub</a>
-        <a className="secondary-button" href={`/auth/oauth?provider=google&next=${encodeURIComponent(next ?? "/app")}`}>Google</a>
+      <SignInOAuthButtons next={next} />
+      <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-slate-muted">
+        <span className="h-px flex-1 bg-line" />
+        or email
+        <span className="h-px flex-1 bg-line" />
       </div>
-      <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-slate-muted"><span className="h-px flex-1 bg-line"/>or email<span className="h-px flex-1 bg-line"/></div>
       <FormStatus type="error" message={formError} />
 
       <FormField label="Email" error={errors.email?.message}>

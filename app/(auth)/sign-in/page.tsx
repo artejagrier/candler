@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { AUTH_ROUTES } from "@/lib/auth/routes";
+import { AUTH_ERROR_MESSAGES, type AuthErrorCode } from "@/lib/auth/oauth";
 import { param, type SearchParams } from "@/lib/utilities/params";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { AuthConfigNotice } from "@/components/auth/AuthConfigNotice";
@@ -13,11 +14,6 @@ export const metadata: Metadata = {
   description: "Sign in to your Candler workspace.",
 };
 
-const ERRORS: Record<string, string> = {
-  auth_callback: "We couldn't complete sign-in. Please try again.",
-  verify: "That verification link is invalid or has expired.",
-};
-
 export default async function SignInPage({
   searchParams,
 }: {
@@ -26,6 +22,12 @@ export default async function SignInPage({
   const sp = await searchParams;
   const next = param(sp, "next");
   const errorCode = param(sp, "error");
+  const errorMessage =
+    errorCode && errorCode in AUTH_ERROR_MESSAGES
+      ? AUTH_ERROR_MESSAGES[errorCode as AuthErrorCode]
+      : errorCode
+        ? AUTH_ERROR_MESSAGES.oauth
+        : null;
 
   return (
     <AuthCard
@@ -44,12 +46,9 @@ export default async function SignInPage({
       }
     >
       <AuthConfigNotice />
-      {errorCode ? (
+      {errorMessage ? (
         <div className="mb-4">
-          <FormStatus
-            type="error"
-            message={ERRORS[errorCode] ?? "Something went wrong. Try again."}
-          />
+          <FormStatus type="error" message={errorMessage} />
         </div>
       ) : null}
       <SignInForm next={next} />

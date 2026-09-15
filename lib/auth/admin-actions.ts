@@ -1,6 +1,7 @@
 "use server";
 
-import { SITE_URL, isSupabaseAdminConfigured } from "@/lib/env";
+import { isSupabaseAdminConfigured } from "@/lib/env";
+import { emailConfirmRedirectTo } from "@/lib/auth/oauth";
 import { AUTH_ROUTES } from "@/lib/auth/routes";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -33,9 +34,7 @@ export async function inviteUserAction(email: string): Promise<InviteResult> {
 
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${SITE_URL}/auth/confirm?next=${encodeURIComponent(
-      AUTH_ROUTES.invitation,
-    )}`,
+    redirectTo: emailConfirmRedirectTo(AUTH_ROUTES.invitation),
   });
   if (error) return { ok: false, error: error.message };
 

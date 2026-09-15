@@ -1,14 +1,24 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { SITE_URL, isSupabaseConfigured } from "@/lib/env";
+import { isSupabaseConfigured } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import {
   AUTH_ROUTES,
   DEFAULT_AUTHENTICATED_REDIRECT,
   safeNextPath,
 } from "@/lib/auth/routes";
+import {
+  OAUTH_LEGAL_COOKIE,
+  VERIFICATION_REQUESTED_MESSAGE,
+  emailConfirmRedirectTo,
+  isOAuthProvider,
+  oauthStartPath,
+  publicAuthError,
+  type OAuthProvider,
+} from "@/lib/auth/oauth";
 import {
   forgotPasswordSchema,
   invitationSchema,
@@ -30,6 +40,7 @@ import {
   verifyAndConsumeRecoveryCode,
 } from "@/lib/auth/recovery-codes";
 import { recordLegalConsent } from "@/lib/legal/consent";
+import { LEGAL_ACCEPTANCE_MESSAGE } from "@/lib/legal/versions";
 
 /** Discriminated result every action returns to its form. */
 export type ActionResult =
@@ -88,12 +99,24 @@ export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
     password: parsed.data.password,
     options: {
       data: { full_name: parsed.data.name },
-      emailRedirectTo: `${SITE_URL}/auth/confirm?next=${encodeURIComponent(
-        DEFAULT_AUTHENTICATED_REDIRECT,
-      )}`,
+      emailRedirectTo: emailConfirmRedirectTo(DEFAULT_AUTHENTICATED_REDIRECT),
     },
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return {
+      ok: false,
+      error: publicAuthError(error, "We couldn't create that account. Try again."),
+    };
+  }
+
+  const identities = data.user?.identities ?? [];
+  if (data.user && !data.session && identities.length === 0) {
+    return {
+      ok: false,
+      error:
+        "We couldn't send a verification email. Sign in if you already have an account, or try a different email.",
+    };
+  }
 
   if (data.user?.id) {
     const consent = await recordLegalConsent({ userId: data.user.id, source: "signup" });
@@ -110,6 +133,7 @@ export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
     redirectTo: `${AUTH_ROUTES.verifyEmail}?email=${encodeURIComponent(
       parsed.data.email,
     )}`,
+    message: VERIFICATION_REQUESTED_MESSAGE,
   };
 }
 
@@ -125,13 +149,21 @@ export async function forgotPasswordAction(
   const supabase = await createClient();
   // The recovery link lands on /auth/confirm, which establishes a session and
   // forwards to the reset-password screen.
-  await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${SITE_URL}/auth/confirm?next=${encodeURIComponent(
-      AUTH_ROUTES.resetPassword,
-    )}`,
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: emailConfirmRedirectTo(AUTH_ROUTES.resetPassword),
   });
+  if (error) {
+    return {
+      ok: false,
+      error: publicAuthError(
+        error,
+        "We couldn't send a reset email. Try again in a few minutes.",
+      ),
+    };
+  }
 
-  // Always report success — never reveal whether an account exists.
+  // Success means Supabase accepted the send request. Do not reveal whether the
+  // address has an account.
   return {
     ok: true,
     message:
@@ -179,13 +211,43 @@ export async function resendVerificationAction(
     type: "signup",
     email,
     options: {
-      emailRedirectTo: `${SITE_URL}/auth/confirm?next=${encodeURIComponent(
-        DEFAULT_AUTHENTICATED_REDIRECT,
-      )}`,
+      emailRedirectTo: emailConfirmRedirectTo(DEFAULT_AUTHENTICATED_REDIRECT),
     },
   });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, message: "Verification email sent." };
+  if (error) {
+    return {
+      ok: false,
+      error: publicAuthError(
+        error,
+        "We couldn't send a verification email. Check the address and try again.",
+      ),
+    };
+  }
+  return { ok: true, message: VERIFICATION_REQUESTED_MESSAGE };
+}
+
+export async function startSocialSignupAction(
+  provider: OAuthProvider,
+  legalAccepted: boolean,
+): Promise<ActionResult> {
+  if (!isSupabaseConfigured) return NOT_CONFIGURED;
+  if (!isOAuthProvider(provider)) {
+    return { ok: false, error: "That sign-in method isn't available." };
+  }
+  if (legalAccepted !== true) {
+    return { ok: false, error: LEGAL_ACCEPTANCE_MESSAGE };
+  }
+
+  const jar = await cookies();
+  jar.set(OAUTH_LEGAL_COOKIE, "1", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 10 * 60,
+  });
+
+  return { ok: true, redirectTo: oauthStartPath(provider) };
 }
 
 // ── MFA challenge (step-up at sign-in) ───────────────────────────────────────

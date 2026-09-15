@@ -70,6 +70,19 @@ export function safeNextPath(
 ): string {
   if (!next) return fallback;
   // Must be a root-relative path and not a protocol-relative "//host" URL.
-  if (!next.startsWith("/") || next.startsWith("//")) return fallback;
+  if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+    return fallback;
+  }
+  if (next.includes("\\") || next.includes("://") || /[\0\r\n]/.test(next)) {
+    return fallback;
+  }
+  try {
+    const decoded = decodeURIComponent(next);
+    if (decoded.startsWith("//") || decoded.includes("://") || decoded.includes("\\")) {
+      return fallback;
+    }
+  } catch {
+    return fallback;
+  }
   return next;
 }

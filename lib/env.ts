@@ -25,10 +25,37 @@ export const SUPABASE_PUBLISHABLE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
   "";
 
+/**
+ * Resolve the public site origin used for auth redirects and email links.
+ * Production deployments must never emit localhost, even if the env copy is stale.
+ */
+export function resolveAuthSiteUrl(input: {
+  siteUrl: string;
+  vercelEnv?: string;
+}): string {
+  const trimmed = input.siteUrl.replace(/\/$/, "");
+  const isLocal = /localhost|127\.0\.0\.1/i.test(trimmed);
+  if (input.vercelEnv === "production") {
+    if (trimmed.startsWith("https://") && !isLocal) return trimmed;
+    return "https://candler.dev";
+  }
+  return trimmed || "http://localhost:3000";
+}
+
 /** Absolute site URL, used for auth redirects, email links, and metadata. */
-export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
-).replace(/\/$/, "");
+export const SITE_URL = resolveAuthSiteUrl({
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  vercelEnv: process.env.VERCEL_ENV,
+});
+
+/** Supabase Auth callback registered with Google / GitHub OAuth apps. */
+export function supabaseAuthCallbackUrl(
+  supabaseUrl: string = SUPABASE_URL,
+): string {
+  const base = supabaseUrl.replace(/\/$/, "");
+  if (!base) return "";
+  return `${base}/auth/v1/callback`;
+}
 
 /**
  * Whether the public Supabase config is present. Safe to evaluate on the client

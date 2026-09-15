@@ -9,6 +9,7 @@ import { Controller, useForm } from "react-hook-form";
 import { signUpAction } from "@/lib/auth/actions";
 import { signUpSchema, type SignUpInput } from "@/lib/auth/schemas";
 import { FormStatus } from "@/components/auth/FormStatus";
+import { SignUpOAuthButtons } from "@/components/auth/OAuthButtons";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { SubmitButton } from "@/components/auth/SubmitButton";
 import { LegalConsentField } from "@/components/legal/LegalConsentField";
@@ -123,6 +124,10 @@ export function SignUpForm() {
               inputRef={field.ref}
               name={field.name}
               error={errors.legalAccepted?.message}
+              disabled={isSubmitting}
+            />
+            <SignUpOAuthButtons
+              legalAccepted={Boolean(field.value)}
               disabled={isSubmitting}
             />
             <SubmitButton

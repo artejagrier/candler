@@ -112,6 +112,7 @@ test("signup checkbox is required, unchecked by default, and legal links open se
   assert.equal(signupForm.includes('legalAccepted: false'), true);
   assert.equal(signupForm.includes("LegalConsentField"), true);
   assert.equal(signupForm.includes("disabled={isSubmitting || !field.value}"), true);
+  assert.equal(signupForm.includes("SignUpOAuthButtons"), true);
   assert.equal(signupForm.includes("target=\"_blank\""), false);
   assert.equal(signupPage.includes("By creating an account you agree"), false);
   const field = readFileSync(new URL("../components/legal/LegalConsentField.tsx", import.meta.url), "utf8");

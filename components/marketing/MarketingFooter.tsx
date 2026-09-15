@@ -3,15 +3,26 @@ import Link from "next/link";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { SITE } from "@/config/site";
 
-const FOOTER_LINKS: { heading: string; links: { label: string; href: string }[] }[] =
+const FOOTER_COLUMNS: { heading: string; links: { label: string; href: string }[] }[] =
   [
     {
       heading: "Product",
       links: [
-        { label: "Features", href: "/features" },
-        { label: "Integrations", href: "/#integrations" },
+        { label: "Agent", href: "/#agent" },
+        { label: "Vault", href: "/#vault" },
+        { label: "Cloud", href: "/#cloud" },
+        { label: "Authenticator", href: "/#auth" },
+        { label: "Recovery", href: "/#auth" },
         { label: "Pricing", href: "/pricing" },
-        { label: "Sign up", href: "/sign-up" },
+      ],
+    },
+    {
+      heading: "Resources",
+      links: [
+        { label: "Documentation", href: "/docs" },
+        { label: "Security", href: "/security" },
+        { label: "FAQ", href: "/faq" },
+        { label: "Status", href: "/status" },
       ],
     },
     {
@@ -19,7 +30,6 @@ const FOOTER_LINKS: { heading: string; links: { label: string; href: string }[] 
       links: [
         { label: "About", href: "/about" },
         { label: "Contact", href: "/contact" },
-        { label: "FAQ", href: "/faq" },
       ],
     },
     {
@@ -28,31 +38,33 @@ const FOOTER_LINKS: { heading: string; links: { label: string; href: string }[] 
         { label: "Privacy", href: "/privacy" },
         { label: "Terms", href: "/terms" },
         { label: "Acceptable Use", href: "/acceptable-use" },
-        { label: "Security", href: "/security" },
       ],
     },
   ];
 
 export function MarketingFooter() {
   return (
-    <footer className="mt-24 border-t border-line px-4 py-14 sm:px-6">
-      <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
+    <footer className="border-t border-line px-4 py-14 sm:px-6">
+      <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
+        {/* Brand column */}
         <div className="max-w-xs">
           <Wordmark size="md" href="/" />
           <p className="mt-4 text-sm leading-relaxed text-fog">
-            {SITE.tagline} Candler bridges your stack — it doesn&apos;t replace
-            it.
+            One guardian for your secrets, environments, and backups.
+            Candler watches your stack so you don&apos;t have to.
           </p>
+          <p className="mt-3 text-xs text-slate-muted">{SITE.domain}</p>
         </div>
 
-        {FOOTER_LINKS.map((column) => (
-          <nav key={column.heading} aria-label={column.heading}>
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-muted">
-              {column.heading}
+        {/* Link columns */}
+        {FOOTER_COLUMNS.map((col) => (
+          <nav key={col.heading} aria-label={col.heading}>
+            <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-muted">
+              {col.heading}
             </h2>
-            <ul className="mt-4 flex flex-col gap-2.5">
-              {column.links.map((link) => (
-                <li key={link.href}>
+            <ul className="flex flex-col gap-2.5">
+              {col.links.map((link) => (
+                <li key={link.href + link.label}>
                   <Link
                     href={link.href}
                     className="text-sm text-fog transition-colors hover:text-white"
@@ -66,11 +78,9 @@ export function MarketingFooter() {
         ))}
       </div>
 
-      <div className="mx-auto mt-12 flex max-w-6xl flex-col items-start justify-between gap-3 border-t border-line pt-6 text-sm text-slate-muted sm:flex-row sm:items-center">
-        <p>
-          © {SITE.name} — {SITE.domain}. Workspace modes stay put until you change them.
-        </p>
-        <p>Built with honest security. No fake encryption.</p>
+      <div className="mx-auto mt-12 flex max-w-6xl flex-col items-start justify-between gap-3 border-t border-line pt-6 text-xs text-slate-muted sm:flex-row sm:items-center">
+        <p>© {new Date().getFullYear()} {SITE.name}. All rights reserved.</p>
+        <p>Encrypted by default. No fake security.</p>
       </div>
     </footer>
   );

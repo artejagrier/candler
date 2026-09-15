@@ -1,13 +1,22 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { ImageResponse } from "next/og";
 
-import { BRAND, shieldDataUri } from "@/lib/brand/mark";
+import { BRAND } from "@/lib/brand/mark";
 
 /** Shared Open Graph / Twitter card, reused by both metadata routes. */
 export const OG_SIZE = { width: 1200, height: 630 };
 export const OG_ALT = "Candler — The home for every software project";
 export const OG_CONTENT_TYPE = "image/png";
 
+function brandMarkDataUri(): string {
+  const buf = readFileSync(join(process.cwd(), "public/brand/candler-mark.png"));
+  return `data:image/png;base64,${buf.toString("base64")}`;
+}
+
 export function renderBrandCard(): ImageResponse {
+  const mark = brandMarkDataUri();
   return new ImageResponse(
     (
       <div
@@ -24,23 +33,10 @@ export function renderBrandCard(): ImageResponse {
           color: BRAND.white,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 96,
-              height: 96,
-              borderRadius: 24,
-              background: BRAND.purple,
-              boxShadow: `0 0 0 1px ${BRAND.purpleBright}, 0 24px 60px -12px rgba(124,255,79,0.35)`,
-            }}
-          >
-            {/* next/og renders with Satori — a plain <img> is required here. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={shieldDataUri()} width={60} height={60} alt="" />
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          {/* next/og renders with Satori — a plain <img> is required here. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={mark} width={96} height={96} alt="" />
           <div style={{ display: "flex", fontSize: 52, fontWeight: 700 }}>
             Candler
             <span style={{ color: BRAND.lavender }}>.dev</span>

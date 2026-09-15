@@ -12,11 +12,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-/** Top-level marketing navigation. Integrations is an on-page section. */
+/** Top-level marketing navigation. */
 export const MARKETING_NAV: { label: string; href: string }[] = [
-  { label: "Vault", href: "/#vault" },
   { label: "Agent", href: "/#agent" },
+  { label: "Vault", href: "/#vault" },
   { label: "Cloud", href: "/#cloud" },
+  { label: "Security", href: "/security" },
   { label: "Pricing", href: "/pricing" },
 ];
 

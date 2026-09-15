@@ -21,9 +21,19 @@ export async function getWorkspaceContext({ create = true }: { create?: boolean 
   if (!create) return null;
   const displayName = typeof user.user_metadata?.full_name === "string" ? `${user.user_metadata.full_name}'s workspace` : "Personal workspace";
   const { data: workspace, error } = await supabase.from("workspaces").insert({ name: displayName, owner_id: user.id }).select("id,name").single();
-  if (error || !workspace) throw new Error("Unable to create workspace.");
+  if (error || !workspace) {
+    const { data: existing } = await supabase.from("workspaces").select("id,name").eq("owner_id", user.id).limit(1).maybeSingle();
+    if (existing) {
+      await supabase.from("workspace_members").upsert({ workspace_id: existing.id, user_id: user.id, role: "owner" });
+      return { userId: user.id, workspaceId: existing.id, workspaceName: existing.name };
+    }
+    throw new Error("Unable to create workspace.");
+  }
   const { error: memberError } = await supabase.from("workspace_members").insert({ workspace_id: workspace.id, user_id: user.id, role: "owner" });
-  if (memberError) throw new Error("Unable to initialize workspace membership.");
+  if (memberError) {
+    const { data: membership } = await supabase.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("workspace_id", workspace.id).maybeSingle();
+    if (!membership) throw new Error("Unable to initialize workspace membership.");
+  }
   return { userId: user.id, workspaceId: workspace.id, workspaceName: workspace.name };
 }
 

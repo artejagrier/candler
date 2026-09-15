@@ -12,12 +12,9 @@ import { AUTH_ROUTES } from "@/lib/auth/routes";
 import { cn } from "@/lib/utilities/cn";
 
 /**
- * Marketing site header: a floating glass bar with the wordmark, primary nav,
- * and auth CTAs. On small screens the nav collapses into an accessible
- * full-screen overlay menu (scroll-locked, ESC to close, closes on navigation).
- *
- * Menu state is closed via link onClick rather than a pathname effect to respect
- * the enforced `react-hooks/set-state-in-effect` rule.
+ * Marketing site header: a stable, full-width bar with the wordmark, primary
+ * nav, and auth CTAs. On small screens the nav collapses into an accessible
+ * overlay menu (scroll-locked, ESC to close, closes on navigation).
  */
 export function MarketingHeader() {
   const [open, setOpen] = useState(false);
@@ -41,11 +38,10 @@ export function MarketingHeader() {
     href.startsWith("/#") ? false : pathname === href;
 
   return (
-    <header className="sticky top-0 z-50 px-4 pt-4 sm:px-6">
-      <div className="glass ring-glow mx-auto flex max-w-6xl items-center justify-between gap-4 rounded-full py-2.5 pl-4 pr-2.5">
+    <header className="mk-navbar">
+      <div className="mk-navbar-inner">
         <Wordmark size="sm" />
 
-        {/* Desktop nav */}
         <nav
           aria-label="Primary"
           className="hidden items-center gap-1 md:flex"
@@ -80,7 +76,6 @@ export function MarketingHeader() {
             Get started
           </Link>
 
-          {/* Mobile menu toggle */}
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -98,13 +93,12 @@ export function MarketingHeader() {
         </div>
       </div>
 
-      {/* Mobile overlay menu */}
       {open ? (
         <div
           id="mobile-menu"
-          className="animate-rise fixed inset-x-0 bottom-0 top-[76px] z-40 px-4 md:hidden"
+          className="animate-rise mk-navbar-overlay md:hidden"
         >
-          <div className="glass ring-glow flex h-full flex-col gap-1 rounded-3xl p-4">
+          <div className="glass flex h-full flex-col gap-1 rounded-3xl p-4">
             <nav aria-label="Mobile" className="flex flex-col gap-1">
               {MARKETING_NAV.map((item) => (
                 <Link

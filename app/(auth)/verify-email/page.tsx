@@ -24,7 +24,7 @@ export default async function VerifyEmailPage({
     <AuthCard
       icon={MailCheck}
       title="Check your email"
-      subtitle="We sent you a confirmation link. Click it to activate your account and finish signing up."
+      subtitle="Verification email requested. Check your inbox and spam folder. Click the confirmation link to activate your account."
       footer={
         <Link
           href={AUTH_ROUTES.signIn}

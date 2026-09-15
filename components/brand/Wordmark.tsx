@@ -1,28 +1,26 @@
-import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { SITE } from "@/config/site";
 import { cn } from "@/lib/utilities/cn";
 
 const SIZES = {
-  sm: { box: "size-7 rounded-lg", icon: "size-4", text: "text-base" },
-  md: { box: "size-8 rounded-lg", icon: "size-5", text: "text-lg" },
-  lg: { box: "size-11 rounded-xl", icon: "size-6", text: "text-2xl" },
+  sm: { box: "size-8", px: 32, text: "text-base" },
+  md: { box: "size-9", px: 36, text: "text-lg" },
+  lg: { box: "size-12", px: 48, text: "text-2xl" },
 } as const;
 
 interface WordmarkProps {
   size?: keyof typeof SIZES;
   /** Render as a link to a destination (defaults to the marketing home). */
   href?: string | null;
-  /** Hide the ".dev" text and wordmark, showing only the shield mark. */
+  /** Hide the ".dev" text and wordmark, showing only the C mark. */
   markOnly?: boolean;
   className?: string;
 }
 
 /**
- * Canonical Candler wordmark: burgundy shield + neon-green check. The mark is
- * never recolored by the workspace theme; surrounding type uses foreground
- * tokens so it stays readable on light and dark surfaces.
+ * Canonical Candler wordmark: the iridescent C mark (transparent PNG) plus
+ * the Candler.dev name. The mark is never recolored by the workspace theme.
  */
 export function Wordmark({
   size = "md",
@@ -35,7 +33,16 @@ export function Wordmark({
   const content = (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <span className={cn("wordmark-mark flex items-center justify-center", s.box)}>
-        <ShieldCheck className={cn(s.icon, "wordmark-glyph")} aria-hidden="true" />
+        {/* Brand mark is a static PNG; next/image is unnecessary at this size. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/brand/candler-mark.png"
+          alt=""
+          width={s.px}
+          height={s.px}
+          className="wordmark-glyph"
+          draggable={false}
+        />
       </span>
       {!markOnly ? (
         <span className={cn("wordmark-name font-semibold tracking-tight", s.text)}>

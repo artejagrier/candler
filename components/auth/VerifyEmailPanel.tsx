@@ -18,6 +18,7 @@ export function VerifyEmailPanel({ email }: { email?: string }) {
   const [pending, setPending] = useState(false);
 
   async function resend() {
+    if (pending) return;
     if (!email) {
       setStatus({
         type: "error",
@@ -27,13 +28,21 @@ export function VerifyEmailPanel({ email }: { email?: string }) {
     }
     setPending(true);
     setStatus(null);
-    const result = await resendVerificationAction(email);
-    setPending(false);
-    setStatus(
-      result.ok
-        ? { type: "success", message: result.message ?? "Email sent." }
-        : { type: "error", message: result.error },
-    );
+    try {
+      const result = await resendVerificationAction(email);
+      setStatus(
+        result.ok
+          ? {
+              type: "success",
+              message:
+                result.message ??
+                "Verification email requested. Check your inbox and spam folder.",
+            }
+          : { type: "error", message: result.error },
+      );
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

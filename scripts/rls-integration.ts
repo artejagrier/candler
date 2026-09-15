@@ -18,6 +18,17 @@ const a = createClient(url, key);
 const b = createClient(url, key);
 const admin = secret ? createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
 
+function assertMutationDenied(
+  result: { data: unknown; error: { code?: string; message?: string } | null },
+  message: string,
+) {
+  const rows = Array.isArray(result.data) ? result.data.length : 0;
+  const privilegeDenied =
+    result.error?.code === "42501" || /permission denied/i.test(result.error?.message ?? "");
+  assert.equal(rows, 0, message);
+  assert.ok(privilegeDenied || result.data !== null, message);
+}
+
 async function main() {
 await a.auth.signInWithPassword({ email: emailA, password: passwordA });
 await b.auth.signInWithPassword({ email: emailB, password: passwordB });
@@ -174,14 +185,20 @@ try {
     const { data: crossConsent } = await b.from("legal_consents").select("id").eq("user_id", userA.id);
     assert.equal(crossConsent?.length, 0, "User B read User A legal consent");
 
-    const { data: consentUpdate } = await a.from("legal_consents").update({ terms_version: "tampered" }).eq("id", consentRow.id).select("id");
-    assert.equal(consentUpdate?.length, 0, "User A updated historical consent");
+    assertMutationDenied(
+      await a.from("legal_consents").update({ terms_version: "tampered" }).eq("id", consentRow.id).select("id"),
+      "User A updated historical consent",
+    );
 
-    const { data: crossConsentUpdate } = await b.from("legal_consents").update({ terms_version: "tampered" }).eq("id", consentRow.id).select("id");
-    assert.equal(crossConsentUpdate?.length, 0, "User B updated User A consent");
+    assertMutationDenied(
+      await b.from("legal_consents").update({ terms_version: "tampered" }).eq("id", consentRow.id).select("id"),
+      "User B updated User A consent",
+    );
 
-    const { data: consentDelete } = await a.from("legal_consents").delete().eq("id", consentRow.id).select("id");
-    assert.equal(consentDelete?.length, 0, "User A deleted historical consent");
+    assertMutationDenied(
+      await a.from("legal_consents").delete().eq("id", consentRow.id).select("id"),
+      "User A deleted historical consent",
+    );
 
     await admin.from("legal_consents").delete().eq("id", consentRow.id);
   }
