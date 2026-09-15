@@ -35,7 +35,11 @@ export async function GET(request: Request) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
-      redirectTo: oauthRedirectTo(url.searchParams.get("next") ?? undefined, origin),
+      redirectTo: oauthRedirectTo(
+        url.searchParams.get("next") ?? undefined,
+        origin,
+        process.env.VERCEL_ENV,
+      ),
       skipBrowserRedirect: true,
     },
   });

@@ -29,6 +29,9 @@ export const SUPABASE_PUBLISHABLE_KEY =
  * Resolve the public site origin used for auth redirects and email links.
  * Production deployments must never emit localhost, even if the env copy is stale.
  */
+export const CANONICAL_PRODUCTION_ORIGIN = "https://candler.dev";
+export const LOCAL_DEV_ORIGIN = "http://localhost:3002";
+
 export function resolveAuthSiteUrl(input: {
   siteUrl: string;
   vercelEnv?: string;
@@ -36,15 +39,25 @@ export function resolveAuthSiteUrl(input: {
   const trimmed = input.siteUrl.replace(/\/$/, "");
   const isLocal = /localhost|127\.0\.0\.1/i.test(trimmed);
   if (input.vercelEnv === "production") {
-    if (trimmed.startsWith("https://") && !isLocal) return trimmed;
-    return "https://candler.dev";
+    if (trimmed.startsWith("https://") && !isLocal) {
+      try {
+        const host = new URL(trimmed).host.toLowerCase();
+        if (host === "candler.dev" || host === "www.candler.dev") {
+          return CANONICAL_PRODUCTION_ORIGIN;
+        }
+      } catch {
+        return CANONICAL_PRODUCTION_ORIGIN;
+      }
+      return trimmed;
+    }
+    return CANONICAL_PRODUCTION_ORIGIN;
   }
-  return trimmed || "http://localhost:3000";
+  return trimmed || LOCAL_DEV_ORIGIN;
 }
 
 /** Absolute site URL, used for auth redirects, email links, and metadata. */
 export const SITE_URL = resolveAuthSiteUrl({
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? LOCAL_DEV_ORIGIN,
   vercelEnv: process.env.VERCEL_ENV,
 });
 

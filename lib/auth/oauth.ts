@@ -1,5 +1,6 @@
 import { AUTH_ROUTES, DEFAULT_AUTHENTICATED_REDIRECT, safeNextPath } from "@/lib/auth/routes";
 import {
+  CANONICAL_PRODUCTION_ORIGIN,
   SITE_URL,
   SUPABASE_PUBLISHABLE_KEY,
   SUPABASE_URL,
@@ -53,20 +54,49 @@ export function oauthStartPath(provider: OAuthProvider, next?: string): string {
   return `/auth/oauth?${params.toString()}`;
 }
 
-export function oauthRedirectTo(next?: string, siteUrl: string = SITE_URL): string {
+export function oauthRedirectTo(
+  next?: string,
+  siteUrl: string = SITE_URL,
+  vercelEnv: string | undefined = process.env.VERCEL_ENV,
+): string {
+  const origin = sanitizeOAuthOrigin(siteUrl, vercelEnv);
   const target = safeNextPath(next);
-  return `${siteUrl}/auth/callback?next=${encodeURIComponent(target)}`;
+  if (target === DEFAULT_AUTHENTICATED_REDIRECT) {
+    return `${origin}/auth/callback`;
+  }
+  return `${origin}/auth/callback?next=${encodeURIComponent(target)}`;
 }
 
 export function emailConfirmRedirectTo(
   next: string = DEFAULT_AUTHENTICATED_REDIRECT,
   siteUrl: string = SITE_URL,
+  vercelEnv: string | undefined = process.env.VERCEL_ENV,
 ): string {
-  return `${siteUrl}/auth/confirm?next=${encodeURIComponent(safeNextPath(next))}`;
+  const origin = sanitizeOAuthOrigin(siteUrl, vercelEnv);
+  return `${origin}/auth/confirm?next=${encodeURIComponent(safeNextPath(next))}`;
 }
 
 export function supabaseProviderCallbackUrl(supabaseUrl?: string): string {
   return supabaseAuthCallbackUrl(supabaseUrl);
+}
+
+export function sanitizeOAuthOrigin(
+  siteUrl: string,
+  vercelEnv: string | undefined = process.env.VERCEL_ENV,
+): string {
+  const trimmed = siteUrl.replace(/\/$/, "");
+  const isLocal = /localhost|127\.0\.0\.1/i.test(trimmed);
+  if (vercelEnv === "production") {
+    if (isLocal) return CANONICAL_PRODUCTION_ORIGIN;
+    return resolveAuthSiteUrl({ siteUrl: trimmed, vercelEnv });
+  }
+  try {
+    const host = new URL(trimmed).host.toLowerCase();
+    if (PRODUCTION_HOSTS.has(host)) return CANONICAL_PRODUCTION_ORIGIN;
+  } catch {
+    /* keep trimmed */
+  }
+  return trimmed;
 }
 
 export function publicOriginFromRequest(
@@ -80,9 +110,8 @@ export function publicOriginFromRequest(
   const protoHeader = request.headers.get("x-forwarded-proto");
   const proto = protoHeader?.split(",")[0]?.trim() || url.protocol.replace(":", "") || "http";
 
-  if (vercelEnv === "production") {
-    if (PRODUCTION_HOSTS.has(host)) return `https://${host}`;
-    return resolveAuthSiteUrl({ siteUrl, vercelEnv });
+  if (vercelEnv === "production" || PRODUCTION_HOSTS.has(host)) {
+    return sanitizeOAuthOrigin(siteUrl, "production");
   }
 
   return `${proto}://${host}`;

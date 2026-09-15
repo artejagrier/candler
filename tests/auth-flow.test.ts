@@ -53,12 +53,20 @@ test("production redirect targets stay on candler.dev auth routes", () => {
     "https://candler.dev",
   );
   assert.equal(
+    resolveAuthSiteUrl({ siteUrl: "https://www.candler.dev", vercelEnv: "production" }),
+    "https://candler.dev",
+  );
+  assert.equal(
     resolveAuthSiteUrl({ siteUrl: "http://localhost:3002" }),
     "http://localhost:3002",
   );
   assert.equal(
     oauthRedirectTo("/app", "https://candler.dev"),
-    "https://candler.dev/auth/callback?next=%2Fapp",
+    "https://candler.dev/auth/callback",
+  );
+  assert.equal(
+    oauthRedirectTo("/app/vault", "https://candler.dev"),
+    "https://candler.dev/auth/callback?next=%2Fapp%2Fvault",
   );
   assert.equal(
     emailConfirmRedirectTo("/app", "https://candler.dev"),
@@ -161,6 +169,7 @@ test("unauthenticated /app is denied", () => {
 });
 
 test("production origin never falls back to localhost", () => {
+  const forbidden = ["localhost:3000", "localhost:3001", "localhost:3002"];
   const request = new Request("http://localhost:3000/auth/callback", {
     headers: { "x-forwarded-host": "localhost:3000", "x-forwarded-proto": "http" },
   });
@@ -180,7 +189,7 @@ test("production origin never falls back to localhost", () => {
   });
   assert.equal(
     publicOriginFromRequest(www, "https://candler.dev", "production"),
-    "https://www.candler.dev",
+    "https://candler.dev",
   );
   const vercelHost = new Request("https://candler-xyz.vercel.app/auth/callback", {
     headers: { "x-forwarded-host": "candler-xyz.vercel.app", "x-forwarded-proto": "https" },
@@ -189,11 +198,22 @@ test("production origin never falls back to localhost", () => {
     publicOriginFromRequest(vercelHost, "https://candler.dev", "production"),
     "https://candler.dev",
   );
+  for (const port of forbidden) {
+    const origin = publicOriginFromRequest(request, `http://${port}`, "production");
+    const redirect = oauthRedirectTo("/app", `http://${port}`, "production");
+    assert.equal(origin.includes("localhost"), false, origin);
+    assert.equal(redirect.includes("localhost"), false, redirect);
+    assert.equal(redirect.startsWith("https://candler.dev/auth/callback"), true);
+  }
   const localDev = new Request("http://localhost:3002/auth/oauth", {
     headers: { "x-forwarded-host": "localhost:3002", "x-forwarded-proto": "http" },
   });
   assert.equal(
     publicOriginFromRequest(localDev, "http://localhost:3002"),
     "http://localhost:3002",
+  );
+  assert.equal(
+    oauthRedirectTo("/app", "http://localhost:3002"),
+    "http://localhost:3002/auth/callback",
   );
 });
