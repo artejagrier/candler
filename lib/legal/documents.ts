@@ -221,7 +221,7 @@ export const PRIVACY_DOCUMENT: LegalDocument = {
       bullets: [
         "Account and profile information, such as name, email address, and authentication identifiers.",
         "Authentication data, including password hashes managed by Supabase Auth, session cookies, MFA factor metadata, and hashed or encrypted recovery-code material as applicable. We do not store your account password in plaintext.",
-        "Billing metadata from Stripe, such as customer and subscription identifiers, plan, status, and period dates. We do not store full payment-card numbers on Candler servers.",
+        "Billing metadata from Paddle, such as customer and subscription identifiers, plan, status, and period dates. We do not store full payment-card numbers on Candler servers.",
         "Project and workspace metadata, including names, environments, services, and similar organizational records.",
         "Encrypted Vault, Authenticator, and Recovery payloads (ciphertext, initialization vectors, authentication tags, and key version). Plaintext secret values are not stored as a Vault column. They may exist briefly in memory on a server during encrypt, decrypt, or authorized reveal.",
         "Cloud file bytes and Cloud metadata (filename, size, path, checksums, status). Files are stored in private object storage.",
