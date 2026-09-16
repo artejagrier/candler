@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut } from "lucide-react";
+import { Compass, LogOut } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { ACCOUNT_MENU } from "@/config/product";
+import { replayCandlerTour } from "@/components/workspace/CandlerTour";
 import { signOutAction } from "@/lib/auth/actions";
 import { useOutsideDismiss } from "@/hooks/useOutsideDismiss";
 
@@ -43,6 +44,17 @@ export function AccountMenu({ userName, workspaceName }: { userName: string; wor
               {label}
             </Link>
           ))}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              replayCandlerTour();
+            }}
+          >
+            <Compass aria-hidden="true" />
+            Take a tour
+          </button>
           <div className="app-menu-sep" role="separator" />
           <form action={signOutAction}>
             <SignOutMenuItem />

@@ -8,19 +8,31 @@ import { hasProEntitlement } from "@/lib/billing/entitlements";
 
 export const metadata: Metadata = { title: "Billing" };
 
-export default async function Billing() {
+type Product = "candler_pro" | "cloud_500" | "cloud_1tb";
+const VALID_PLANS = new Set<string>(["candler_pro", "cloud_500", "cloud_1tb"]);
+
+export default async function Billing({
+  searchParams,
+}: {
+  searchParams: Promise<{ plan?: string }>;
+}) {
+  const { plan } = await searchParams;
+  const autoPlan: Product | undefined =
+    plan && VALID_PLANS.has(plan) ? (plan as Product) : undefined;
+
   const data = isSupabaseConfigured ? await getWorkspaceData() : null;
   const [usage, quota] = data
     ? await Promise.all([getCurrentStorageUsage(data.context.workspaceId), getStorageQuota(data.context.workspaceId)])
     : [0, { plan: "free" as const, bytes: 10 * 1024 ** 3 }];
   const proActive = hasProEntitlement(data?.subscriptions ?? []);
-  const hasCustomer = (data?.subscriptions ?? []).some((subscription) => Boolean(subscription.stripe_customer_id));
+  const hasCustomer = (data?.subscriptions ?? []).some((subscription) => Boolean(subscription.paddle_customer_id));
   const configured = Boolean(
-    process.env.STRIPE_SECRET_KEY &&
-    process.env.STRIPE_WEBHOOK_SECRET &&
-    process.env.STRIPE_PRICE_CANDLER_PRO &&
-    process.env.STRIPE_PRICE_CLOUD_500 &&
-    process.env.STRIPE_PRICE_CLOUD_1TB,
+    process.env.PADDLE_API_KEY &&
+    process.env.PADDLE_WEBHOOK_SECRET &&
+    process.env.PADDLE_PRICE_CANDLER_PRO &&
+    process.env.PADDLE_PRICE_CLOUD_500 &&
+    process.env.PADDLE_PRICE_CLOUD_1TB &&
+    process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
   );
   return (
     <>
@@ -32,6 +44,7 @@ export default async function Billing() {
         quotaBytes={quota.bytes}
         hasCustomer={hasCustomer}
         configured={configured}
+        autoPlan={autoPlan}
       />
     </>
   );

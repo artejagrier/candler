@@ -87,11 +87,13 @@ export async function signInAction(
 }
 
 // ── Sign up ──────────────────────────────────────────────────────────────────
-export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
+export async function signUpAction(input: SignUpInput, next?: string): Promise<ActionResult> {
   if (!isSupabaseConfigured) return NOT_CONFIGURED;
 
   const parsed = signUpSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstZodError(parsed.error) };
+
+  const destination = next ? safeNextPath(next) : DEFAULT_AUTHENTICATED_REDIRECT;
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
@@ -99,7 +101,7 @@ export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
     password: parsed.data.password,
     options: {
       data: { full_name: parsed.data.name },
-      emailRedirectTo: emailConfirmRedirectTo(DEFAULT_AUTHENTICATED_REDIRECT),
+      emailRedirectTo: emailConfirmRedirectTo(destination),
     },
   });
   if (error) {
@@ -127,7 +129,7 @@ export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
 
   // A confirmed session means email verification is disabled (dev); otherwise
   // the user must confirm via the emailed link.
-  if (data.session) return { ok: true, redirectTo: DEFAULT_AUTHENTICATED_REDIRECT };
+  if (data.session) return { ok: true, redirectTo: destination };
   return {
     ok: true,
     redirectTo: `${AUTH_ROUTES.verifyEmail}?email=${encodeURIComponent(

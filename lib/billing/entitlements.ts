@@ -1,13 +1,13 @@
 import { CLOUD_PLANS, type CloudPlan } from "@/lib/cloud/quota";
 
 export const PRODUCTS = {
-  candler_pro: { name: "Candler Pro", price: 18, envPriceId: "STRIPE_PRICE_CANDLER_PRO" },
-  cloud_500: { name: "Candler Pro + Cloud 500", price: 29, envPriceId: "STRIPE_PRICE_CLOUD_500" },
-  cloud_1tb: { name: "Candler Pro + Cloud 1 TB", price: 39, envPriceId: "STRIPE_PRICE_CLOUD_1TB" },
+  candler_pro: { name: "Candler Pro", price: 18, envPriceId: "PADDLE_PRICE_CANDLER_PRO" },
+  cloud_500: { name: "Candler Pro + Cloud 500", price: 29, envPriceId: "PADDLE_PRICE_CLOUD_500" },
+  cloud_1tb: { name: "Candler Pro + Cloud 1 TB", price: 39, envPriceId: "PADDLE_PRICE_CLOUD_1TB" },
 } as const;
 
 export type ProductKey = keyof typeof PRODUCTS;
-export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled" | "incomplete";
+export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled" | "paused";
 
 export interface MappedProduct {
   product_key: ProductKey;
@@ -22,7 +22,7 @@ export interface SubscriptionRow {
   current_period_end: string | Date | null;
   cloud_plan?: string | null;
   entitlement_pro?: boolean | null;
-  stripe_customer_id?: string | null;
+  paddle_customer_id?: string | null;
   storage_quota_bytes?: number | null;
 }
 
@@ -41,9 +41,9 @@ export function isLiveSubscription(status: string, currentPeriodEnd: string | Da
 export function productFromPriceId(
   priceId: string | undefined,
   prices: { pro?: string; cloud500?: string; cloud1tb?: string } = {
-    pro: process.env.STRIPE_PRICE_CANDLER_PRO,
-    cloud500: process.env.STRIPE_PRICE_CLOUD_500,
-    cloud1tb: process.env.STRIPE_PRICE_CLOUD_1TB,
+    pro: process.env.PADDLE_PRICE_CANDLER_PRO,
+    cloud500: process.env.PADDLE_PRICE_CLOUD_500,
+    cloud1tb: process.env.PADDLE_PRICE_CLOUD_1TB,
   },
 ): MappedProduct | null {
   if (!priceId) return null;

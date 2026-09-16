@@ -17,6 +17,7 @@ Legend:
 | `NEXT_PUBLIC_SITE_URL` | Absolute deployment URL — auth redirect origin, OAuth callback, OG metadata. Set to the production domain (not `localhost`). |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (`https://<ref>.supabase.co`). |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable/anon key. RLS-bound; safe for the client. |
+| `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | Paddle client token for Paddle.js overlay checkout. Production tokens start with `live_`; sandbox tokens start with `test_`. |
 
 ## SERVER SECRET (server-only — never `NEXT_PUBLIC_`)
 
@@ -28,11 +29,11 @@ Legend:
 | `R2_ACCESS_KEY_ID` | R2 access key id. |
 | `R2_SECRET_ACCESS_KEY` | R2 secret access key. |
 | `R2_BUCKET` | Private bucket name (`candler-cloud`). Bucket must remain **private**. |
-| `STRIPE_SECRET_KEY` | Stripe secret key. Use the **sandbox/test** key until live products are explicitly created. |
-| `STRIPE_WEBHOOK_SECRET` | Signing secret for the production webhook endpoint (`/api/stripe/webhook`). Distinct from the local Stripe CLI secret. |
-| `STRIPE_PRICE_CANDLER_PRO` | Price id — Pro ($18 / 50 GB). |
-| `STRIPE_PRICE_CLOUD_500` | Price id — Pro + Cloud 500 ($29 / 500 GB). |
-| `STRIPE_PRICE_CLOUD_1TB` | Price id — Pro + Cloud 1 TB ($39 / 1 TB). |
+| `PADDLE_API_KEY` | Paddle server-side API key. Use the **sandbox** key until live. Never expose via `NEXT_PUBLIC_`. |
+| `PADDLE_WEBHOOK_SECRET` | Signing secret for the production webhook endpoint (`/api/paddle/webhook`). Set from the Paddle dashboard notification endpoint. |
+| `PADDLE_PRICE_CANDLER_PRO` | Paddle price id — Pro ($18 / 50 GB). |
+| `PADDLE_PRICE_CLOUD_500` | Paddle price id — Pro + Cloud 500 ($29 / 500 GB). |
+| `PADDLE_PRICE_CLOUD_1TB` | Paddle price id — Pro + Cloud 1 TB ($39 / 1 TB). |
 | `OPENAI_API_KEY` | Enables the Candler Agent (read/analyze/recommend). **Currently unset** — Agent is disabled until provided. |
 | `OPENAI_AGENT_MODEL` | Agent model id. Required alongside `OPENAI_API_KEY`. |
 
@@ -48,7 +49,8 @@ Legend:
 
 - [ ] All PUBLIC SAFE + SERVER SECRET names above set for the **Production** environment.
 - [ ] `NEXT_PUBLIC_SITE_URL` points at the production domain.
-- [ ] Production Stripe **webhook endpoint** created and `STRIPE_WEBHOOK_SECRET` set to *its* signing secret (not the CLI's).
+- [ ] Production Paddle **notification endpoint** created (`/api/paddle/webhook`) and `PADDLE_WEBHOOK_SECRET` set to its signing secret.
+- [ ] `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` set to the **production** (`live_`) client token.
 - [ ] `/api/health` returns `200` in production (it returns `503` while `agent.configured` is false — expected until `OPENAI_*` is set).
 - [ ] `SUPABASE_SECRET_KEY` confirmed **not** exposed in the client bundle.
 - [ ] R2 bucket confirmed private (no public/`r2.dev` exposure).

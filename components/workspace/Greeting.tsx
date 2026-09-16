@@ -9,7 +9,7 @@ const SALUTATION: Record<SkyPeriod, string> = {
 
 /**
  * Time-aware greeting for the dashboard. Uses the clock for copy only —
- * it does not drive workspace appearance or the protected sky.
+ * it does not drive workspace appearance.
  */
 export function Greeting({ name }: { name: string }) {
   const period = currentPeriod();

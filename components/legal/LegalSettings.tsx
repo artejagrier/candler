@@ -21,6 +21,9 @@ export function LegalSettings({ consent }: { consent: StoredLegalConsent | null 
           <Link href={LEGAL_ROUTES.privacy}>Privacy Policy</Link>
         </li>
         <li>
+          <Link href={LEGAL_ROUTES.refund}>Refund Policy</Link>
+        </li>
+        <li>
           <Link href={LEGAL_ROUTES.acceptableUse}>Acceptable Use</Link>
         </li>
         <li>

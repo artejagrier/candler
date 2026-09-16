@@ -13,7 +13,7 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <main className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-12">
+    <main className="mk-root relative flex min-h-dvh flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="animate-rise mb-8 flex justify-center">
           <Wordmark size="lg" />
@@ -29,6 +29,7 @@ export default function AuthLayout({
         <nav className="legal-auth-links" aria-label="Legal">
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
+          <Link href="/refund">Refund Policy</Link>
           <Link href="/acceptable-use">Acceptable Use</Link>
           <Link href="/security">Security</Link>
         </nav>

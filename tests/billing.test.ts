@@ -19,7 +19,7 @@ test("entitlements require active status and unexpired period", () => {
   assert.equal(hasEntitlement("past_due", new Date("2030-01-01"), new Date("2026-01-01")), false);
 });
 
-test("price mapping never trusts an unknown Stripe price", () => {
+test("price mapping never trusts an unknown Paddle price", () => {
   const prices = { pro: "price_pro", cloud500: "price_500", cloud1tb: "price_1tb" };
   assert.equal(productFromPriceId("price_other", prices), null);
   assert.deepEqual(productFromPriceId("price_pro", prices), {

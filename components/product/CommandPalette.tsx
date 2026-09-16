@@ -37,6 +37,7 @@ interface StaticCommand {
 /** Actions + navigation. These NEVER expose secret values — they only route. */
 const ACTIONS: StaticCommand[] = [
   { id: "a-project", label: "Create project", hint: "Start a new project", icon: Plus, href: "/app/projects", keywords: ["new", "add"] },
+  { id: "a-search", label: "Search projects", hint: "Find a project by name", icon: Search, href: "/app/search", keywords: ["find"] },
   { id: "a-secret", label: "Add a secret", hint: "Store an encrypted credential", icon: KeyRound, href: "/app/vault", keywords: ["key", "token", "env", "credential"] },
   { id: "a-auth", label: "Add authenticator", hint: "Scan a QR code or enter a setup key", icon: ShieldCheck, href: "/app/vault/authenticator", keywords: ["totp", "2fa", "otp", "mfa"] },
   { id: "a-upload", label: "Upload to Cloud", hint: "Back up files and project folders", icon: Upload, href: "/app/cloud", keywords: ["file", "folder", "backup"] },
@@ -48,6 +49,7 @@ const NAV: StaticCommand[] = [
   { id: "n-projects", label: "Projects", hint: "All projects", icon: FolderKanban, href: "/app/projects" },
   { id: "n-vault", label: "Vault", hint: "Encrypted secrets", icon: KeyRound, href: "/app/vault" },
   { id: "n-auth", label: "Authenticator", hint: "TOTP codes", icon: Shield, href: "/app/vault/authenticator", keywords: ["totp", "2fa"] },
+  { id: "n-recovery", label: "Recovery", hint: "Recovery codes", icon: ShieldCheck, href: "/app/vault/recovery", keywords: ["backup codes"] },
   { id: "n-cloud", label: "Cloud", hint: "Verified backups", icon: Cloud, href: "/app/cloud" },
   { id: "n-agent", label: "Agent", hint: "Candler Agent", icon: Bot, href: "/app/agent" },
   { id: "n-activity", label: "Activity", hint: "Workspace history", icon: Activity, href: "/app/activity" },

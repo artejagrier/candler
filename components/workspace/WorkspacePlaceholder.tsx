@@ -58,8 +58,8 @@ export function WorkspacePlaceholder({
               <h2 className="text-sm font-semibold text-foreground">{zone.title}</h2>
               <p className="mt-1.5 text-sm text-fog">{zone.note}</p>
               <div className="mt-4 space-y-2" aria-hidden="true">
-                <div className="h-2.5 w-3/4 rounded-full bg-white/6" />
-                <div className="h-2.5 w-1/2 rounded-full bg-white/6" />
+                <div className="h-2.5 w-3/4 rounded-full bg-[color-mix(in_srgb,var(--color-foreground)_6%,transparent)]" />
+                <div className="h-2.5 w-1/2 rounded-full bg-[color-mix(in_srgb,var(--color-foreground)_6%,transparent)]" />
               </div>
             </Surface>
           ))}

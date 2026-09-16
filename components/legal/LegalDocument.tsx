@@ -54,6 +54,7 @@ export function LegalDocumentView({ document }: { document: LegalDocument }) {
       <p className="legal-doc-footer">
         <Link href="/terms">Terms</Link>
         <Link href="/privacy">Privacy</Link>
+        <Link href="/refund">Refund Policy</Link>
         <Link href="/acceptable-use">Acceptable Use</Link>
         <Link href="/security">Security</Link>
       </p>

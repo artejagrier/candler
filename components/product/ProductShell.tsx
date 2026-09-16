@@ -3,16 +3,19 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Menu, Search, ShieldCheck, X } from "lucide-react";
-import { Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { PRIMARY_NAV, PROJECT_GLOBAL_NAV, PROJECT_NAV, SIDEBAR_FOOTER } from "@/config/product";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { AccountMenu } from "@/components/product/AccountMenu";
 import { NotificationsMenu } from "@/components/product/NotificationsMenu";
 import { CommandPalette } from "@/components/product/CommandPalette";
-import { ModeSelect } from "@/components/theme/ThemeSelect";
+import { AppearanceToggle } from "@/components/theme/AppearanceToggle";
+import { CandlerTour } from "@/components/workspace/CandlerTour";
+import { ModShortcut, useModShortcutAria } from "@/components/ui/ModShortcut";
 import { useDialogA11y } from "@/hooks/useDialogA11y";
 import { cn } from "@/lib/utilities/cn";
+import { isAppleNavigator, isModKeyEvent } from "@/lib/utilities/shortcut";
 
 const PROJECT_PATH = /^\/app\/projects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -84,6 +87,23 @@ function projectLinkActive(
   }
 }
 
+function SearchTrigger({ onOpenPalette }: { onOpenPalette?: () => void }) {
+  const shortcutAria = useModShortcutAria("K");
+  return (
+    <button
+      type="button"
+      className="app-search"
+      onClick={onOpenPalette}
+      aria-label="Search and commands"
+      aria-keyshortcuts={shortcutAria}
+    >
+      <Search className="size-4" aria-hidden="true" />
+      <span className="app-search-label">Search…</span>
+      <ModShortcut className="app-search-shortcut" />
+    </button>
+  );
+}
+
 export function ProductShell(props: {
   children: React.ReactNode;
   userName: string;
@@ -123,13 +143,13 @@ function ProductShellReady({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if (isModKeyEvent(event, "k", isAppleNavigator(navigator))) {
         event.preventDefault();
         setPaletteOpen((v) => !v);
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, []);
 
   return (
@@ -205,17 +225,7 @@ function ProductChrome({
             <p className="app-crumb">{crumb(pathname, projectName)}</p>
           </div>
 
-          <button
-            type="button"
-            className="app-search"
-            onClick={onOpenPalette}
-            aria-label="Search and commands"
-            aria-keyshortcuts="Meta+K Control+K"
-          >
-            <Search className="size-4" aria-hidden="true" />
-            <span className="app-search-label">Search…</span>
-            <kbd>⌘K</kbd>
-          </button>
+          <SearchTrigger onOpenPalette={onOpenPalette} />
 
           <div className="app-topbar-right">
             <span className="app-status">
@@ -242,6 +252,8 @@ function ProductChrome({
       ) : null}
 
       {paletteOpen && onClosePalette ? <CommandPalette onClose={onClosePalette} /> : null}
+
+      <CandlerTour />
     </div>
   );
 }
@@ -275,11 +287,9 @@ function Sidebar({
         <ProjectNav pathname={pathname} projectId={projectId} projectName={projectName} queryProject={queryProject} />
       ) : null}
       <nav className="app-sidebar-footer" aria-label="Account">
+        <AppearanceToggle compact />
         {SIDEBAR_FOOTER.map((item) => (
-          <span key={`${item.href}-${item.label}`} className="app-sidebar-footer-item">
-            <SideLink pathname={pathname} item={item} />
-            {item.label === "Settings" ? <ModeSelect compact /> : null}
-          </span>
+          <SideLink key={`${item.href}-${item.label}`} pathname={pathname} item={item} />
         ))}
       </nav>
     </aside>
@@ -369,10 +379,7 @@ function MobileDrawer({
   const titleId = useId();
   useDialogA11y(panelRef, onClose);
 
-  const items = useMemo(
-    () => [...(projectId ? PROJECT_GLOBAL_NAV : PRIMARY_NAV), ...SIDEBAR_FOOTER],
-    [projectId],
-  );
+  const primary = projectId ? PROJECT_GLOBAL_NAV : PRIMARY_NAV;
 
   return (
     <div className="app-drawer" role="presentation">
@@ -392,11 +399,12 @@ function MobileDrawer({
           </button>
         </div>
         <nav aria-label="Primary">
-          {items.map((item) => (
-            <span key={`${item.href}-${item.label}`} className="app-sidebar-footer-item">
-              <SideLink pathname={pathname} item={item} onNavigate={onClose} />
-              {item.label === "Settings" ? <ModeSelect compact /> : null}
-            </span>
+          {primary.map((item) => (
+            <SideLink key={item.href} pathname={pathname} item={item} onNavigate={onClose} />
+          ))}
+          <AppearanceToggle compact />
+          {SIDEBAR_FOOTER.map((item) => (
+            <SideLink key={`${item.href}-${item.label}`} pathname={pathname} item={item} onNavigate={onClose} />
           ))}
         </nav>
         {projectId && projectName ? (

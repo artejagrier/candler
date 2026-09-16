@@ -34,15 +34,16 @@ npm run lint    # ESLint (flat config)
 ```
 
 Open http://localhost:3000. The workspace lives at `/dashboard`; press
-`⌘K` / `Ctrl+K` anywhere in the workspace to open the command palette.
+the platform command shortcut (`⌘ K` on Mac, `Ctrl + K` on Windows/Linux)
+anywhere in the workspace to open the command palette.
 
 ## Project structure
 
 ```
 app/
-  layout.tsx            Root layout — fonts, metadata, ThemeProvider, optional sky
+  layout.tsx            Root layout — fonts, metadata, ThemeProvider
   page.tsx              Phase 1A foundation landing (marketing landing → 1B)
-  globals.css           Design tokens (@theme), base styles, glass utils, sky
+  globals.css           Design tokens (@theme), base styles, glass utils
   (workspace)/          Route group (no URL segment) sharing the AppShell
     layout.tsx          Command palette + floating dock
     dashboard/          /dashboard  (Home)
@@ -51,15 +52,14 @@ app/
 components/
   ui/                   Reusable primitives: Surface, Button, Input, Badge,
                         Modal, Kbd
-  sky/                  SkyBackground (opt-in environment modes only)
+  theme/                Light/Dark appearance + accent catalog
   navigation/           Dock, CommandPalette, CommandPaletteProvider
-  providers/            SkyProvider (explicit environment override)
   layout/               AppShell (workspace chrome)
   workspace/            WorkspacePlaceholder, Greeting
   marketing/            FoundationPreview (design-system tour)
 config/                 navigation, commands, site metadata
 lib/
-  utilities/            cn (classnames), time (sky periods)
+  utilities/            cn (classnames), time (greeting periods)
   mock/                 Prototype mock data (example projects)
 hooks/                  useMediaQuery, usePrefersReducedMotion
 types/                  Shared TypeScript types
@@ -67,19 +67,11 @@ types/                  Shared TypeScript types
 
 ## Design language
 
-Black glass surfaces, purple borders and glow, white typography. Colors are
-defined once as tokens in `app/globals.css` (`--color-ink`, `--color-purple`,
-`--color-lavender`, …) and consumed as Tailwind utilities (`bg-ink`,
-`text-lavender`). Green/yellow/red appear **only** as restrained status colors,
-never decoration.
-
-### Workspace appearance
-
-Default Burgundy is a stable, Vercel-like workspace: solid sidebar, clean
-surfaces, burgundy identity, neon-green actions. Optional **Special
-Environments** (Sunrise, Day, Sunset, Night) live in the Mode dropdown and
-apply only when chosen. They are not driven by local time. Night keeps the
-protected star field and flying star while that mode is active.
+Workspace appearance is Light or Dark. Accent color (default neon green) is
+applied only to interactive emphasis — buttons, active nav, focus rings — via
+semantic tokens in `app/globals.css`. Success, warning, and danger stay
+semantic and do not follow the selected accent. The public marketing site
+keeps its own black / white / neon green / burgundy identity.
 
 ## Accessibility
 

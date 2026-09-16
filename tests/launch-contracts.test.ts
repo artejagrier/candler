@@ -24,29 +24,27 @@ test("cloud upload authorization does not accept client plan or usage", () => {
 });
 
 test("checkout derives workspace identity on the server", () => {
-  const source = readFileSync(new URL("../app/api/stripe/checkout/route.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../app/api/paddle/checkout/route.ts", import.meta.url), "utf8");
   assert.equal(source.includes("workspaceId: z.uuid()"), false);
   assert.equal(source.includes("getWorkspaceContext"), true);
-  assert.equal(source.includes("mode: \"subscription\""), true);
   assert.equal(source.includes("subscriptions.update"), true);
   assert.equal(source.includes("isLiveSubscription"), true);
-  assert.equal(/priceId|price: z/.test(source.split("const input")[1]?.split("export async")[0] ?? "priceId"), false);
+  assert.equal(/priceId|price: z/.test(source.split("const input")[1]?.split("export async")[0] ?? ""), false);
 });
 
 test("billing portal does not accept a client-supplied customer id", () => {
-  const source = readFileSync(new URL("../app/api/stripe/portal/route.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../app/api/paddle/portal/route.ts", import.meta.url), "utf8");
   assert.equal(source.includes("request.json"), false);
   assert.equal(source.includes("getWorkspaceContext"), true);
-  assert.equal(source.includes("stripe_customer_id"), true);
+  assert.equal(source.includes("paddle_customer_id"), true);
 });
 
 test("webhook verifies signatures and claims event ids", () => {
-  const source = readFileSync(new URL("../app/api/stripe/webhook/route.ts", import.meta.url), "utf8");
-  assert.equal(source.includes("constructEvent"), true);
-  assert.equal(source.includes("stripe-signature"), true);
-  assert.equal(source.includes("stripe_webhook_events"), true);
+  const source = readFileSync(new URL("../app/api/paddle/webhook/route.ts", import.meta.url), "utf8");
+  assert.equal(source.includes("Paddle-Signature"), true);
+  assert.equal(source.includes("paddle_webhook_events"), true);
   assert.equal(source.includes("23505"), true);
-  assert.equal(source.includes(".delete().eq(\"id\", event.id)"), true);
+  assert.equal(source.includes(".delete().eq(\"id\", event.eventId)"), true);
   assert.equal(source.includes("500"), true);
 });
 

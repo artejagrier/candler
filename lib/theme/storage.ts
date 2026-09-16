@@ -1,20 +1,25 @@
 import {
-  DEFAULT_MODE,
+  ACCENT_COOKIE,
+  ACCENT_IDS,
+  ACCENT_STORAGE,
+  APPEARANCE_COOKIE,
+  APPEARANCE_STORAGE,
+  DEFAULT_ACCENT,
+  DEFAULT_APPEARANCE,
   MODE_COOKIE,
-  MODE_FAMILIES,
   MODE_STORAGE,
   SHADE_COOKIE,
   SHADE_STORAGE,
   SKY_COOKIE,
   SKY_STORAGE,
-  SKY_TO_MODE,
+  SURFACE_TOKENS,
   THEME_COOKIE,
   THEME_STORAGE,
-  isModeId,
-  resolveAppearance,
-  type ModeId,
+  accentTokens,
+  migrateStoredPreferences,
+  type AccentId,
+  type AppearanceId,
 } from "@/lib/theme/catalog";
-import type { SkyPeriod } from "@/lib/utilities/time";
 
 export function readCookie(source: string | undefined, name: string) {
   if (!source) return "";
@@ -22,44 +27,24 @@ export function readCookie(source: string | undefined, name: string) {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-export function migrateStoredMode(input: {
-  mode?: string | null;
-  theme?: string | null;
-  shade?: string | null;
-  sky?: string | null;
-}) {
-  if (input.mode && isModeId(input.mode)) {
-    const resolved = resolveAppearance(input.mode, input.shade);
-    return { mode: resolved.mode, shade: resolved.shadeId, scheme: resolved.scheme, tokens: resolved.tokens, skyPeriod: resolved.skyPeriod, group: resolved.group };
-  }
-  if (input.sky && input.sky !== "auto" && input.sky in SKY_TO_MODE) {
-    const mode = SKY_TO_MODE[input.sky as SkyPeriod];
-    const resolved = resolveAppearance(mode);
-    return { mode: resolved.mode, shade: resolved.shadeId, scheme: resolved.scheme, tokens: resolved.tokens, skyPeriod: resolved.skyPeriod, group: resolved.group };
-  }
-  const resolved = resolveAppearance(input.theme, input.shade);
-  return { mode: resolved.mode, shade: resolved.shadeId, scheme: resolved.scheme, tokens: resolved.tokens, skyPeriod: resolved.skyPeriod, group: resolved.group };
-}
-
-export function parseStoredTheme(theme?: string | null, shade?: string | null) {
-  const resolved = resolveAppearance(theme, shade);
-  return { theme: resolved.mode, mode: resolved.mode, shade: resolved.shadeId, scheme: resolved.scheme, tokens: resolved.tokens };
-}
-
 function expireCookie(name: string) {
   document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
-export function writeAppearance(mode: string, shade: string) {
-  const resolved = resolveAppearance(mode, shade);
+export function writeAppearance(appearance: string, accent: string) {
+  const resolved = migrateStoredPreferences({ appearance, accent });
   const year = 60 * 60 * 24 * 365;
-  document.cookie = `${MODE_COOKIE}=${encodeURIComponent(resolved.mode)}; Path=/; Max-Age=${year}; SameSite=Lax`;
-  document.cookie = `${SHADE_COOKIE}=${encodeURIComponent(resolved.shadeId)}; Path=/; Max-Age=${year}; SameSite=Lax`;
+  document.cookie = `${APPEARANCE_COOKIE}=${encodeURIComponent(resolved.appearance)}; Path=/; Max-Age=${year}; SameSite=Lax`;
+  document.cookie = `${ACCENT_COOKIE}=${encodeURIComponent(resolved.accent)}; Path=/; Max-Age=${year}; SameSite=Lax`;
+  expireCookie(MODE_COOKIE);
+  expireCookie(SHADE_COOKIE);
   expireCookie(THEME_COOKIE);
   expireCookie(SKY_COOKIE);
   try {
-    localStorage.setItem(MODE_STORAGE, resolved.mode);
-    localStorage.setItem(SHADE_STORAGE, resolved.shadeId);
+    localStorage.setItem(APPEARANCE_STORAGE, resolved.appearance);
+    localStorage.setItem(ACCENT_STORAGE, resolved.accent);
+    localStorage.removeItem(MODE_STORAGE);
+    localStorage.removeItem(SHADE_STORAGE);
     localStorage.removeItem(THEME_STORAGE);
     localStorage.removeItem(SKY_STORAGE);
   } catch {
@@ -69,19 +54,18 @@ export function writeAppearance(mode: string, shade: string) {
 }
 
 const APPEARANCE_EVENT = "candler-appearance";
-let appearanceSnapshot: { mode: ModeId; shade: string; skyPeriod: SkyPeriod | null } | null = null;
+let appearanceSnapshot: { appearance: AppearanceId; accent: AccentId } | null = null;
 
 export function getAppearanceSnapshot() {
   const stored = readStoredAppearance();
   if (
     appearanceSnapshot &&
-    appearanceSnapshot.mode === stored.mode &&
-    appearanceSnapshot.shade === stored.shade &&
-    appearanceSnapshot.skyPeriod === stored.skyPeriod
+    appearanceSnapshot.appearance === stored.appearance &&
+    appearanceSnapshot.accent === stored.accent
   ) {
     return appearanceSnapshot;
   }
-  appearanceSnapshot = { mode: stored.mode, shade: stored.shade, skyPeriod: stored.skyPeriod };
+  appearanceSnapshot = { appearance: stored.appearance, accent: stored.accent };
   return appearanceSnapshot;
 }
 
@@ -110,6 +94,8 @@ function readRawAppearance() {
     }
   };
   return {
+    appearance: readCookie(cookie, APPEARANCE_COOKIE) || readLs(APPEARANCE_STORAGE),
+    accent: readCookie(cookie, ACCENT_COOKIE) || readLs(ACCENT_STORAGE),
     mode: readCookie(cookie, MODE_COOKIE) || readLs(MODE_STORAGE),
     theme: readCookie(cookie, THEME_COOKIE) || readLs(THEME_STORAGE),
     shade: readCookie(cookie, SHADE_COOKIE) || readLs(SHADE_STORAGE),
@@ -118,39 +104,58 @@ function readRawAppearance() {
 }
 
 export function readStoredAppearance() {
-  return migrateStoredMode(readRawAppearance());
+  return migrateStoredPreferences(readRawAppearance());
 }
 
-export function applyModeToDocument(mode: string, shade: string) {
-  const resolved = resolveAppearance(mode, shade);
+export function applyAppearanceToDocument(appearance: string, accent: string) {
+  const resolved = migrateStoredPreferences({ appearance, accent });
   const root = document.documentElement;
-  root.dataset.mode = resolved.mode;
-  root.dataset.theme = resolved.mode;
-  root.dataset.themeShade = resolved.shadeId;
+  root.dataset.appearance = resolved.appearance;
+  root.dataset.accent = resolved.accent;
   root.dataset.scheme = resolved.scheme;
-  if (resolved.skyPeriod) root.dataset.skyPeriod = resolved.skyPeriod;
-  else delete root.dataset.skyPeriod;
+  delete root.dataset.mode;
+  delete root.dataset.theme;
+  delete root.dataset.themeShade;
+  delete root.dataset.skyPeriod;
   root.style.colorScheme = resolved.scheme;
   for (const [key, value] of Object.entries(resolved.tokens)) {
     root.style.setProperty(key, value);
   }
 }
 
-export const applyThemeToDocument = applyModeToDocument;
+export const applyModeToDocument = applyAppearanceToDocument;
+export const applyThemeToDocument = applyAppearanceToDocument;
 
-const MODE_TOKEN_MAP = Object.fromEntries(
-  MODE_FAMILIES.map((family) => [
-    family.id,
-    Object.fromEntries(
-      family.shades.map((shade) => [
-        shade.id,
-        { scheme: shade.scheme, tokens: shade.tokens, sky: family.skyPeriod, defaultShade: family.defaultShade },
-      ]),
-    ),
-  ]),
-);
+const TOKEN_PACK = {
+  surfaces: SURFACE_TOKENS,
+  accents: Object.fromEntries(
+    ACCENT_IDS.map((id) => [
+      id,
+      {
+        dark: accentTokens("dark", id),
+        light: accentTokens("light", id),
+      },
+    ]),
+  ),
+};
 
-export const THEME_BOOT_SCRIPT = `(function(){try{var M=${JSON.stringify(MODE_TOKEN_MAP)};var SKYMAP=${JSON.stringify(SKY_TO_MODE)};var c=document.cookie||"";function g(n){var m=c.match(new RegExp("(?:^|; )"+n+"=([^;]*)"));return m?decodeURIComponent(m[1]):"";}function ls(k){try{return localStorage.getItem(k)||""}catch(e){return ""}}var mode=g("${MODE_COOKIE}")||ls("${MODE_STORAGE}");var shade=g("${SHADE_COOKIE}")||ls("${SHADE_STORAGE}");if(!mode){var sky=g("${SKY_COOKIE}")||ls("${SKY_STORAGE}");var theme=g("${THEME_COOKIE}")||ls("${THEME_STORAGE}");mode=SKYMAP[sky]||theme||"${DEFAULT_MODE}";}var fam=M[mode]||M["${DEFAULT_MODE}"];var pack=fam[shade]||fam[Object.keys(fam)[0]];var root=document.documentElement;root.setAttribute("data-mode",mode);root.setAttribute("data-theme",mode);root.setAttribute("data-theme-shade",pack&&pack.defaultShade?shade||Object.keys(fam)[0]:shade||"");if(pack){root.setAttribute("data-scheme",pack.scheme);root.style.colorScheme=pack.scheme;if(pack.sky)root.setAttribute("data-sky-period",pack.sky);else root.removeAttribute("data-sky-period");var tok=pack.tokens;for(var k in tok)root.style.setProperty(k,tok[k]);}}catch(e){}})();`;
+const LIGHT_LEGACY = ["white", "day"];
+const ACCENT_LEGACY: Record<string, AccentId> = {
+  burgundy: "burgundy",
+  pink: "hot-pink",
+  purple: "purple",
+  "royal-blue": "blue",
+  blue: "blue",
+  green: "neon-green",
+};
+const SKY_TO_LEGACY: Record<string, string> = {
+  morning: "night",
+  afternoon: "day",
+  evening: "night",
+  night: "night",
+};
+
+export const THEME_BOOT_SCRIPT = `(function(){try{var P=${JSON.stringify(TOKEN_PACK)};var LIGHT=${JSON.stringify(LIGHT_LEGACY)};var AMAP=${JSON.stringify(ACCENT_LEGACY)};var SKY=${JSON.stringify(SKY_TO_LEGACY)};var c=document.cookie||"";function g(n){var m=c.match(new RegExp("(?:^|; )"+n+"=([^;]*)"));return m?decodeURIComponent(m[1]):""}function ls(k){try{return localStorage.getItem(k)||""}catch(e){return ""}}function isApp(v){return v==="light"||v==="dark"}function isAcc(v){return !!P.accents[v]}var appearance=g("${APPEARANCE_COOKIE}")||ls("${APPEARANCE_STORAGE}");var accent=g("${ACCENT_COOKIE}")||ls("${ACCENT_STORAGE}");if(!isApp(appearance)||!isAcc(accent)){var mode=g("${MODE_COOKIE}")||ls("${MODE_STORAGE}");var sky=g("${SKY_COOKIE}")||ls("${SKY_STORAGE}");var theme=g("${THEME_COOKIE}")||ls("${THEME_STORAGE}");var legacy=mode||(sky&&sky!=="auto"&&SKY[sky])||theme||"";if(!isApp(appearance))appearance=LIGHT.indexOf(legacy)>=0?"light":"${DEFAULT_APPEARANCE}";if(!isAcc(accent))accent=AMAP[legacy]||"${DEFAULT_ACCENT}";}if(!isApp(appearance))appearance="${DEFAULT_APPEARANCE}";if(!isAcc(accent))accent="${DEFAULT_ACCENT}";var surf=P.surfaces[appearance]||P.surfaces.${DEFAULT_APPEARANCE};var acc=(P.accents[accent]||P.accents["${DEFAULT_ACCENT}"])[appearance];var root=document.documentElement;root.setAttribute("data-appearance",appearance);root.setAttribute("data-accent",accent);root.setAttribute("data-scheme",appearance);root.style.colorScheme=appearance;root.removeAttribute("data-mode");root.removeAttribute("data-theme");root.removeAttribute("data-theme-shade");root.removeAttribute("data-sky-period");function apply(tok){if(!tok)return;for(var k in tok)root.style.setProperty(k,tok[k])}apply(surf);apply(acc);if(!g("${APPEARANCE_COOKIE}")||!g("${ACCENT_COOKIE}")){var y=60*60*24*365;document.cookie="${APPEARANCE_COOKIE}="+encodeURIComponent(appearance)+"; Path=/; Max-Age="+y+"; SameSite=Lax";document.cookie="${ACCENT_COOKIE}="+encodeURIComponent(accent)+"; Path=/; Max-Age="+y+"; SameSite=Lax";["${MODE_COOKIE}","${SHADE_COOKIE}","${THEME_COOKIE}","${SKY_COOKIE}"].forEach(function(n){document.cookie=n+"=; Path=/; Max-Age=0; SameSite=Lax"});try{localStorage.setItem("${APPEARANCE_STORAGE}",appearance);localStorage.setItem("${ACCENT_STORAGE}",accent);["${MODE_STORAGE}","${SHADE_STORAGE}","${THEME_STORAGE}","${SKY_STORAGE}"].forEach(function(k){localStorage.removeItem(k)})}catch(e){}}}catch(e){}})();`;
 
 export function canHoverPreview() {
   if (typeof window === "undefined") return false;

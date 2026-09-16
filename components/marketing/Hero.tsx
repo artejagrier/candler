@@ -1,9 +1,11 @@
+"use client";
+
 import { ArrowRight, Command } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
-import { Kbd } from "@/components/ui/Kbd";
+import { ModShortcut } from "@/components/ui/ModShortcut";
 import { Surface } from "@/components/ui/Surface";
 import { INTEGRATIONS } from "@/config/marketing";
 import { SITE } from "@/config/site";
@@ -60,8 +62,7 @@ export function Hero() {
               Search projects, secrets, and services…
             </span>
             <span className="hidden items-center gap-1 sm:flex">
-              <Kbd>⌘</Kbd>
-              <Kbd>K</Kbd>
+              <ModShortcut className="inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-line bg-[color-mix(in_srgb,var(--color-foreground)_5%,transparent)] px-1.5 font-mono text-[11px] font-medium text-fog" />
             </span>
           </div>
 

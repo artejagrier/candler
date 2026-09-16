@@ -35,6 +35,77 @@ export async function deleteSecretAction(id:string):Promise<Result>{try{uuid.par
 
 export async function importEnvAction(raw:{projectId:string;environmentId:string;entries:{name:string;value:string;serviceName:string}[]}):Promise<Result<{created:number;duplicates:string[]}>>{try{const input=z.object({projectId:uuid,environmentId:uuid,entries:z.array(z.object({name, value:z.string().min(1).max(65536),serviceName:z.string().min(1).max(80)})).min(1).max(200)}).parse(raw),access=await requireProjectAccess(input.projectId),supabase=await createClient();const{data:existing}=await supabase.from("secrets").select("name").eq("project_id",input.projectId).eq("environment_id",input.environmentId).in("name",input.entries.map(e=>e.name));const duplicates=(existing??[]).map(x=>x.name),selected=input.entries.filter(x=>!duplicates.includes(x.name));for(const entry of selected){const serviceId=await resolveService(input.projectId,access.workspaceId,entry.serviceName);const{error}=await supabase.from("secrets").insert({workspace_id:access.workspaceId,owner_id:access.userId,project_id:input.projectId,environment_id:input.environmentId,service_id:serviceId,name:entry.name,...encryptedColumns(entry.value)});if(error)throw new Error(`Import stopped at ${entry.name}.`);}await emitAuditEvent({workspaceId:access.workspaceId,actorId:access.userId,eventType:"secret.env_imported",targetType:"project",targetId:input.projectId,metadata:{created:selected.length,duplicates:duplicates.length,environmentId:input.environmentId}});revalidatePath("/app/vault");return{ok:true,data:{created:selected.length,duplicates}};}catch(e){return fail(e)}}
 
+const smartImportInput = z.object({
+  projectId: uuid,
+  environmentId: uuid,
+  source: z.enum(["paste", "file"]),
+  entries: z.array(z.object({
+    name,
+    value: z.string().min(1).max(65536),
+    serviceName: z.string().min(1).max(80),
+    replace: z.boolean(),
+  })).min(1).max(200),
+});
+
+export async function smartImportAction(raw: z.input<typeof smartImportInput>): Promise<Result<{
+  created: number; updated: number; skipped: number; failed: { name: string; reason: string }[];
+}>> {
+  try {
+    const input = smartImportInput.parse(raw);
+    const access = await requireProjectAccess(input.projectId);
+    const supabase = await createClient();
+
+    const { data: env } = await supabase.from("environments").select("id")
+      .eq("id", input.environmentId).eq("project_id", input.projectId).maybeSingle();
+    if (!env) throw new Error("Environment not found.");
+
+    const { data: existing } = await supabase.from("secrets")
+      .select("id,name")
+      .eq("project_id", input.projectId)
+      .eq("environment_id", input.environmentId)
+      .eq("workspace_id", access.workspaceId)
+      .in("name", input.entries.map((e) => e.name));
+    const existingMap = new Map((existing ?? []).map((x) => [x.name, x.id]));
+
+    let created = 0, updated = 0, skipped = 0;
+    const failed: { name: string; reason: string }[] = [];
+
+    for (const entry of input.entries) {
+      const existingId = existingMap.get(entry.name);
+      try {
+        if (existingId) {
+          if (!entry.replace) { skipped++; continue; }
+          const serviceId = await resolveService(input.projectId, access.workspaceId, entry.serviceName);
+          const { error } = await supabase.from("secrets")
+            .update({ ...encryptedColumns(entry.value), service_id: serviceId, updated_at: new Date().toISOString() })
+            .eq("id", existingId).eq("owner_id", access.userId).eq("workspace_id", access.workspaceId);
+          if (error) throw new Error("Could not update.");
+          updated++;
+        } else {
+          const serviceId = await resolveService(input.projectId, access.workspaceId, entry.serviceName);
+          const { error } = await supabase.from("secrets").insert({
+            workspace_id: access.workspaceId, owner_id: access.userId, project_id: input.projectId,
+            environment_id: input.environmentId, service_id: serviceId, name: entry.name,
+            ...encryptedColumns(entry.value),
+          });
+          if (error) throw new Error("Could not create.");
+          created++;
+        }
+      } catch (e) {
+        failed.push({ name: entry.name, reason: e instanceof Error ? e.message : "Unknown" });
+      }
+    }
+
+    await emitAuditEvent({
+      workspaceId: access.workspaceId, actorId: access.userId,
+      eventType: "vault.bulk_imported", targetType: "project", targetId: input.projectId,
+      metadata: { created, updated, skipped, failures: failed.length, source: input.source, projectId: input.projectId, environmentId: input.environmentId },
+    });
+    revalidatePath("/app/vault");
+    return { ok: true, data: { created, updated, skipped, failed } };
+  } catch (e) { return fail(e); }
+}
+
 export async function addAuthenticatorAction(raw:{uri?:string;secret?:string;issuer?:string;accountName?:string}):Promise<AuthenticatorAddResult>{
   try {
     const parsed = parseTotpSetup({ uri: raw.uri, secret: raw.secret, accountName: raw.issuer || raw.accountName });

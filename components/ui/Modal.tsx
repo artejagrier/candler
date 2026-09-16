@@ -136,7 +136,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex size-8 shrink-0 items-center justify-center rounded-full text-fog transition-colors hover:bg-white/8 hover:text-foreground"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full text-fog transition-colors hover:bg-[color-mix(in_srgb,var(--color-foreground)_8%,transparent)] hover:text-foreground"
           >
             <X className="size-4" aria-hidden="true" />
           </button>

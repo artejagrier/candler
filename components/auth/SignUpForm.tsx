@@ -16,7 +16,7 @@ import { LegalConsentField } from "@/components/legal/LegalConsentField";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
 
-export function SignUpForm() {
+export function SignUpForm({ plan }: { plan?: string }) {
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
   const {
@@ -35,10 +35,12 @@ export function SignUpForm() {
     },
   });
 
+  const next = plan ? `/app/settings/billing?plan=${plan}` : undefined;
+
   const onSubmit = handleSubmit(async (values) => {
     if (isSubmitting) return;
     setFormError(null);
-    const result = await signUpAction(values);
+    const result = await signUpAction(values, next);
     if (!result.ok) {
       setFormError(result.error);
       return;

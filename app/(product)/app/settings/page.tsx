@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/product/PageHeader";
 import { AppearanceSettings } from "@/components/theme/AppearanceSettings";
 import { LegalSettings } from "@/components/legal/LegalSettings";
+import { ReplayTutorial } from "@/components/workspace/ReplayTutorial";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getLatestLegalConsent } from "@/lib/legal/consent";
 
@@ -17,6 +18,7 @@ export default async function Settings() {
     <>
       <PageHeader eyebrow="Workspace" title="Settings" description="Appearance, account, security, and billing." />
       <AppearanceSettings />
+      <ReplayTutorial />
       <LegalSettings consent={consent} />
       <div className="settings-list">
         <div>

@@ -2,9 +2,8 @@
 
 /**
  * Root error boundary. Catches failures in the root layout itself (where the
- * sky/provider live), so it must render its own <html>/<body>. Deeper, nicer
- * boundaries (e.g. app/(product)/app/error.tsx) handle in-shell errors and keep
- * the atmosphere. No stack traces or error internals are shown to the user.
+ * theme provider lives), so it must render its own <html>/<body>. Deeper, nicer
+ * boundaries (e.g. app/(product)/app/error.tsx) handle in-shell errors.
  */
 export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (

@@ -131,7 +131,7 @@ try {
     await admin.from("subscriptions").insert({
       workspace_id: workspace.id,
       owner_id: userA.id,
-      stripe_customer_id: `cus_${suffix}`,
+      paddle_customer_id: `ctm_${suffix}`,
       product_key: "candler_pro",
       status: "active",
       storage_quota_bytes: 10737418240,

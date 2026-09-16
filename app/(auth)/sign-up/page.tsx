@@ -11,7 +11,20 @@ export const metadata: Metadata = {
   description: "Create a Candler workspace for every software project you build.",
 };
 
-export default function SignUpPage() {
+const VALID_PLANS = new Set(["candler_pro", "cloud_500", "cloud_1tb"]);
+
+export default async function SignUpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ plan?: string }>;
+}) {
+  const { plan } = await searchParams;
+  const validPlan = plan && VALID_PLANS.has(plan) ? plan : undefined;
+
+  const signInHref = validPlan
+    ? `${AUTH_ROUTES.signIn}?next=${encodeURIComponent(`/app/settings/billing?plan=${validPlan}`)}`
+    : AUTH_ROUTES.signIn;
+
   return (
     <AuthCard
       title="Create your workspace"
@@ -20,7 +33,7 @@ export default function SignUpPage() {
         <>
           Already have an account?{" "}
           <Link
-            href={AUTH_ROUTES.signIn}
+            href={signInHref}
             className="font-medium text-lavender transition-colors hover:text-white"
           >
             Sign in
@@ -29,7 +42,7 @@ export default function SignUpPage() {
       }
     >
       <AuthConfigNotice />
-      <SignUpForm />
+      <SignUpForm plan={validPlan} />
     </AuthCard>
   );
 }

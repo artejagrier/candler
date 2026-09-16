@@ -23,7 +23,7 @@ export type LegalSection = {
 };
 
 export type LegalDocument = {
-  slug: "terms" | "privacy" | "acceptable-use" | "security";
+  slug: "terms" | "privacy" | "refund" | "acceptable-use" | "security";
   title: string;
   description: string;
   version: string;
@@ -99,9 +99,9 @@ export const TERMS_DOCUMENT: LegalDocument = {
       id: "billing",
       title: "Subscriptions, plans, and cancellation",
       paragraphs: [
-        "Paid plans are billed through Stripe. Current published launch prices are Candler Pro at US$18 per month, Pro + Cloud 500 at US$29 per month, and Pro + Cloud 1 TB at US$39 per month, plus a Free plan with limited Cloud storage. Prices, entitlements, and taxes may change.",
+        "Paid plans are billed through Paddle. Current published launch prices are Candler Pro at US$18 per month, Pro + Cloud 500 at US$29 per month, and Pro + Cloud 1 TB at US$39 per month, plus a Free plan with limited Cloud storage. Prices, entitlements, and taxes may change.",
         "Unless required by law or stated at checkout, fees are non-refundable. Canceling stops future renewal charges; you generally retain access through the end of the paid period. Failed payments may result in suspension or reversion to Free entitlements.",
-        `You authorize ${SITE.name} and Stripe to store billing metadata necessary to operate subscriptions, invoices, and customer portals. ${SITE.name} does not store full payment-card numbers on its own servers.`,
+        `You authorize ${SITE.name} and Paddle to store billing metadata necessary to operate subscriptions, invoices, and customer portals. ${SITE.name} does not store full payment-card numbers on its own servers.`,
       ],
     },
     {
@@ -247,7 +247,7 @@ export const PRIVACY_DOCUMENT: LegalDocument = {
       bullets: [
         "Supabase, for authentication, Postgres, and row-level security.",
         "Cloudflare R2, for private Cloud object storage and signed access.",
-        "Stripe, for checkout, subscriptions, customer portal, and invoices.",
+        "Paddle, for checkout, subscriptions, customer portal, and invoices.",
         "OpenAI, when Candler Agent is enabled, for model inference on sanitized conversation content.",
         "Vercel, for application hosting, logs, and related infrastructure where the product is deployed there.",
       ],
@@ -431,7 +431,94 @@ export const SECURITY_DOCUMENT: LegalDocument = {
   ],
 };
 
-export const LEGAL_DOCUMENTS = [TERMS_DOCUMENT, PRIVACY_DOCUMENT, AUP_DOCUMENT, SECURITY_DOCUMENT] as const;
+export const REFUND_DOCUMENT: LegalDocument = {
+  slug: "refund",
+  title: "Refund Policy",
+  description: `How ${SITE.name} handles subscription charges, cancellation, and refund requests.`,
+  version: "2026-09-16",
+  effectiveLabel: "September 16, 2026",
+  updatedLabel: "September 16, 2026",
+  sections: [
+    {
+      id: "operator",
+      title: "Operator",
+      paragraphs: [
+        `${SITE.domain} is a subscription software service operated by RAVYNBASE.`,
+      ],
+    },
+    {
+      id: "subscription-charges",
+      title: "Subscription charges",
+      paragraphs: [
+        "Subscriptions automatically renew according to the billing period selected at checkout unless canceled before renewal.",
+      ],
+    },
+    {
+      id: "refunds",
+      title: "Refunds",
+      paragraphs: [
+        "Because Candler provides immediate access to digital software services and cloud resources, subscription payments are generally non-refundable once charged.",
+        "However, customers may contact us within 7 days of a charge if:",
+      ],
+      bullets: [
+        "they were charged because of a billing or technical error;",
+        "they were charged more than once for the same subscription; or",
+        "they were unable to access the paid service because of a verified Candler service issue.",
+      ],
+    },
+    {
+      id: "approved-refunds",
+      title: "Approved refunds",
+      paragraphs: [
+        "Approved refunds will be returned to the original payment method. Processing times may depend on the payment provider and financial institution.",
+      ],
+    },
+    {
+      id: "cancellation",
+      title: "Cancellation",
+      paragraphs: [
+        "Customers may cancel their subscription through Candler's billing settings/customer portal. Cancellation prevents future renewals. Unless otherwise required by applicable law, cancellation does not automatically refund charges already paid.",
+      ],
+    },
+    {
+      id: "plan-changes",
+      title: "Plan changes",
+      paragraphs: [
+        "Upgrades and downgrades may result in prorated or adjusted charges according to the billing terms displayed when the change is made.",
+      ],
+    },
+    {
+      id: "cloud-storage",
+      title: "Cloud storage",
+      paragraphs: [
+        "Customers are responsible for downloading or backing up information they wish to retain before losing access to paid storage features following cancellation or expiration.",
+      ],
+    },
+    {
+      id: "exceptions",
+      title: "Exceptions",
+      paragraphs: [
+        "Nothing in this policy limits refund, cancellation, or consumer rights that cannot legally be excluded under applicable law.",
+      ],
+    },
+    {
+      id: "payment-processing",
+      title: "Payment processing",
+      paragraphs: [
+        "Payments, subscription management, and eligible refunds are processed through Candler's authorized payment provider.",
+      ],
+    },
+    {
+      id: "contact",
+      title: "Contact",
+      paragraphs: [
+        `Questions or refund requests should be submitted through Candler's official support/contact channel at ${SITE.url}/contact or ${CONTACT}.`,
+      ],
+    },
+  ],
+};
+
+export const LEGAL_DOCUMENTS = [TERMS_DOCUMENT, PRIVACY_DOCUMENT, REFUND_DOCUMENT, AUP_DOCUMENT, SECURITY_DOCUMENT] as const;
 
 export function legalDocumentBySlug(slug: LegalDocument["slug"]) {
   return LEGAL_DOCUMENTS.find((doc) => doc.slug === slug)!;

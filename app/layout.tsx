@@ -4,18 +4,17 @@ import { cookies } from "next/headers";
 import type { CSSProperties } from "react";
 
 import { SITE } from "@/config/site";
-import { SkyProvider } from "@/components/providers/SkyProvider";
-import { SkyBackground } from "@/components/sky/SkyBackground";
+import { PaddleInit } from "@/components/billing/PaddleInit";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import {
-  DEFAULT_MODE,
-  DEFAULT_SHADE,
+  ACCENT_COOKIE,
+  APPEARANCE_COOKIE,
   MODE_COOKIE,
-  SHADE_COOKIE,
   SKY_COOKIE,
   THEME_COOKIE,
+  migrateStoredPreferences,
 } from "@/lib/theme/catalog";
-import { THEME_BOOT_SCRIPT, migrateStoredMode } from "@/lib/theme/storage";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme/storage";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -44,7 +43,7 @@ export const metadata: Metadata = {
     "GitHub",
     "Vercel",
     "Supabase",
-    "Stripe",
+    "Paddle",
     "Cloudflare",
   ],
   authors: [{ name: SITE.name }],
@@ -70,10 +69,11 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const jar = await cookies();
-  const appearance = migrateStoredMode({
+  const appearance = migrateStoredPreferences({
+    appearance: jar.get(APPEARANCE_COOKIE)?.value ?? "",
+    accent: jar.get(ACCENT_COOKIE)?.value ?? "",
     mode: jar.get(MODE_COOKIE)?.value ?? "",
-    theme: jar.get(THEME_COOKIE)?.value ?? DEFAULT_MODE,
-    shade: jar.get(SHADE_COOKIE)?.value ?? DEFAULT_SHADE,
+    theme: jar.get(THEME_COOKIE)?.value ?? "",
     sky: jar.get(SKY_COOKIE)?.value ?? "",
   });
 
@@ -81,11 +81,9 @@ export default async function RootLayout({
     <html
       lang="en"
       data-scroll-behavior="smooth"
-      data-mode={appearance.mode}
-      data-theme={appearance.mode}
-      data-theme-shade={appearance.shade}
+      data-appearance={appearance.appearance}
+      data-accent={appearance.accent}
       data-scheme={appearance.scheme}
-      data-sky-period={appearance.skyPeriod ?? undefined}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       style={appearance.tokens as CSSProperties}
       suppressHydrationWarning
@@ -94,12 +92,10 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body className="min-h-full">
-        <SkyProvider initialOverride={appearance.skyPeriod}>
-          <ThemeProvider initialMode={appearance.mode} initialShade={appearance.shade}>
-            <SkyBackground />
-            {children}
-          </ThemeProvider>
-        </SkyProvider>
+        <PaddleInit token={process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN ?? ""} />
+        <ThemeProvider initialAppearance={appearance.appearance} initialAccent={appearance.accent}>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

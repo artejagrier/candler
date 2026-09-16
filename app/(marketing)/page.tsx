@@ -240,14 +240,14 @@ export default function LandingPage() {
               <div className="mk-row-copy">
                 <span className="mk-eyebrow mk-eyebrow--on-green">Cloud</span>
                 <h2 className="mk-headline">
-                  Your projects don&apos;t disappear
+                  Your projects don&apos;t have to live
                   <br />
-                  with your laptop.
+                  on your laptop.
                 </h2>
                 <p className="mk-body">
-                  Back up a project to Candler Cloud. Delete the local copy
-                  if you want. Restore it to any device in seconds — intact,
-                  verified, and ready to open.
+                  Back up complete project folders to Candler Cloud, clear
+                  them from your computer when you need the space, and bring
+                  them back whenever you&apos;re ready to work.
                 </p>
                 <p className="mk-green-note">
                   <CloudUpload aria-hidden="true" />

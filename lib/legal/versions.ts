@@ -16,6 +16,7 @@ export const LEGAL_EFFECTIVE_DATE_LABEL = "September 14, 2026";
 export const LEGAL_ROUTES = {
   terms: "/terms",
   privacy: "/privacy",
+  refund: "/refund",
   acceptableUse: "/acceptable-use",
   security: "/security",
 } as const;

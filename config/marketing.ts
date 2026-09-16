@@ -49,7 +49,7 @@ export const FEATURES: Feature[] = [
   {
     title: "Command palette navigation",
     description:
-      "Jump anywhere with ⌘K. A floating dock and keyboard-first flow keep you moving without a heavy sidebar.",
+      "Jump anywhere with {modK}. A floating dock and keyboard-first flow keep you moving without a heavy sidebar.",
     icon: Command,
   },
   {
@@ -123,6 +123,7 @@ export interface PricingTier {
   cta: string;
   href: string;
   highlighted?: boolean;
+  product?: "candler_pro" | "cloud_500" | "cloud_1tb";
 }
 
 export const PRICING_TIERS: PricingTier[] = [
@@ -149,9 +150,10 @@ export const PRICING_TIERS: PricingTier[] = [
       "Vault, Agent, Health, Authenticator, and Recovery",
       "Verified backups and billing portal",
     ],
-    cta: "Start Pro",
-    href: "/sign-up",
+    cta: "Start 7-Day Free Trial",
+    href: "/sign-up?plan=candler_pro",
     highlighted: true,
+    product: "candler_pro",
   },
   {
     name: "Pro + Cloud 500",
@@ -163,8 +165,9 @@ export const PRICING_TIERS: PricingTier[] = [
       "500 GB Cloud storage",
       "Server-enforced quota",
     ],
-    cta: "Choose 500 GB",
-    href: "/sign-up",
+    cta: "Start 7-Day Free Trial",
+    href: "/sign-up?plan=cloud_500",
+    product: "cloud_500",
   },
   {
     name: "Pro + Cloud 1 TB",
@@ -176,8 +179,9 @@ export const PRICING_TIERS: PricingTier[] = [
       "1 TB Cloud storage",
       "Server-enforced quota",
     ],
-    cta: "Choose 1 TB",
-    href: "/sign-up",
+    cta: "Start 7-Day Free Trial",
+    href: "/sign-up?plan=cloud_1tb",
+    product: "cloud_1tb",
   },
 ];
 
@@ -208,9 +212,9 @@ export const FAQ: FaqItem[] = [
       "Yes. Free includes 10 GB of Cloud storage. Paid launch plans are Candler Pro at $18/month for 50 GB, Pro + Cloud 500 at $29/month, and Pro + Cloud 1 TB at $39/month. Team pricing is not for sale yet.",
   },
   {
-    question: "What are Special Environments?",
+    question: "Can I change Candler's appearance?",
     answer:
-      "Sunrise, Day, Sunset, and Night are optional workspace modes. They stay off until you choose one in Appearance. Color modes such as Burgundy stay visually stable and do not follow the time of day.",
+      "Yes. The workspace supports Light and Dark appearances, plus a separate accent color for buttons and selected states. Accent color does not recolor the whole workspace.",
   },
 ];
 
@@ -222,7 +226,7 @@ export interface Stat {
 export const STATS: Stat[] = [
   { value: "1", label: "home for every project" },
   { value: "5+", label: "services bridged" },
-  { value: "⌘K", label: "to go anywhere" },
+  { value: "{modK}", label: "to go anywhere" },
   { value: "0", label: "fake encryption" },
 ];
 

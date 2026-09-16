@@ -1,9 +1,7 @@
 /**
- * Time-of-day helpers for greetings and the protected environment palettes.
+ * Time-of-day helpers for greeting copy on the dashboard.
  *
- * Workspace appearance does not follow these ranges automatically. Sunrise,
- * Day, Sunset, and Night activate only when the user selects that Mode.
- * Ranges remain the protected sky contract:
+ * These ranges do not drive workspace appearance.
  *   morning    05:00–11:59
  *   afternoon  12:00–16:59
  *   evening    17:00–19:59
@@ -19,15 +17,7 @@ export const SKY_PERIODS: readonly SkyPeriod[] = [
   "night",
 ] as const;
 
-/** Human-friendly label for a period (used in the dev preview + settings). */
-export const SKY_PERIOD_LABELS: Record<SkyPeriod, string> = {
-  morning: "Morning",
-  afternoon: "Afternoon",
-  evening: "Evening",
-  night: "Night",
-};
-
-/** Map an hour (0–23) to a sky period. */
+/** Map an hour (0–23) to a greeting period. */
 export function periodForHour(hour: number): SkyPeriod {
   if (hour >= 5 && hour < 12) return "morning";
   if (hour >= 12 && hour < 17) return "afternoon";
@@ -36,8 +26,7 @@ export function periodForHour(hour: number): SkyPeriod {
 }
 
 /**
- * Current period for a given date (defaults to now). Used for greeting copy,
- * not for automatically switching workspace environment modes.
+ * Current period for a given date (defaults to now). Used for greeting copy only.
  *
  * A `timeZone` (IANA name, e.g. "Africa/Nairobi") can be supplied; when omitted
  * we use the runtime's local time. We resolve the hour through
@@ -63,16 +52,3 @@ export function currentPeriod(date: Date = new Date(), timeZone?: string): SkyPe
   return periodForHour(hour);
 }
 
-/**
- * Milliseconds until the next period boundary. Kept for the protected sky
- * contract; the workspace no longer auto-ticks environments from local time.
- */
-export function msUntilNextPeriod(date: Date = new Date()): number {
-  const boundaries = [5, 12, 17, 20]; // period start hours
-  const hour = date.getHours();
-  const nextHour = boundaries.find((b) => b > hour) ?? 24 + boundaries[0];
-
-  const next = new Date(date);
-  next.setHours(nextHour, 0, 0, 0);
-  return Math.max(1000, next.getTime() - date.getTime());
-}

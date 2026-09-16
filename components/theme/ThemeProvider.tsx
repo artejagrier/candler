@@ -1,94 +1,99 @@
 "use client";
 
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import { useSky } from "@/components/providers/SkyProvider";
 import {
-  DEFAULT_MODE,
-  DEFAULT_SHADE,
-  type ModeId,
-  familyById,
+  DEFAULT_ACCENT,
+  DEFAULT_APPEARANCE,
+  type AccentId,
+  type AppearanceId,
   resolveAppearance,
 } from "@/lib/theme/catalog";
 import {
-  applyModeToDocument,
+  applyAppearanceToDocument,
   getAppearanceSnapshot,
   subscribeAppearance,
   writeAppearance,
 } from "@/lib/theme/storage";
-import type { SkyPeriod } from "@/lib/utilities/time";
 
 type AppearanceState = {
-  mode: ModeId;
-  shade: string;
-  skyPeriod: SkyPeriod | null;
+  appearance: AppearanceId;
+  accent: AccentId;
 };
 
 type ThemeContextValue = AppearanceState & {
-  theme: ModeId;
-  setPreview: (next: { mode: string; shade?: string } | null) => void;
-  commit: (next: { mode: string; shade?: string }) => void;
+  scheme: AppearanceId;
+  setPreviewAccent: (next: AccentId | null) => void;
+  commitAppearance: (next: AppearanceId) => void;
+  commitAccent: (next: AccentId) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function appearanceFrom(mode?: string, shade?: string): AppearanceState {
-  const resolved = resolveAppearance(mode, shade);
-  return { mode: resolved.mode, shade: resolved.shadeId, skyPeriod: resolved.skyPeriod };
-}
-
 export function ThemeProvider({
   children,
-  initialMode = DEFAULT_MODE,
-  initialShade = DEFAULT_SHADE,
-  initialTheme,
+  initialAppearance = DEFAULT_APPEARANCE,
+  initialAccent = DEFAULT_ACCENT,
 }: {
   children: ReactNode;
-  initialMode?: string;
-  initialShade?: string;
-  initialTheme?: string;
+  initialAppearance?: string;
+  initialAccent?: string;
 }) {
-  const { setOverride } = useSky();
   const serverSnapshot = useMemo(
-    () => appearanceFrom(initialMode || initialTheme, initialShade),
-    [initialMode, initialShade, initialTheme],
+    () => {
+      const resolved = resolveAppearance(initialAppearance, initialAccent);
+      return { appearance: resolved.appearance, accent: resolved.accent };
+    },
+    [initialAppearance, initialAccent],
   );
   const getServerSnapshot = useCallback(() => serverSnapshot, [serverSnapshot]);
   const saved = useSyncExternalStore(subscribeAppearance, getAppearanceSnapshot, getServerSnapshot);
 
-  const apply = useCallback((mode: string, shade: string) => {
-    const resolved = resolveAppearance(mode, shade);
-    applyModeToDocument(resolved.mode, resolved.shadeId);
-    setOverride(resolved.skyPeriod);
-  }, [setOverride]);
+  const apply = useCallback((appearance: string, accent: string) => {
+    applyAppearanceToDocument(appearance, accent);
+  }, []);
 
   useLayoutEffect(() => {
-    apply(saved.mode, saved.shade);
-  }, [apply, saved.mode, saved.shade]);
+    apply(saved.appearance, saved.accent);
+  }, [apply, saved.appearance, saved.accent]);
 
-  const setPreview = useCallback(
-    (next: { mode: string; shade?: string } | null) => {
+  const setPreviewAccent = useCallback(
+    (next: AccentId | null) => {
       if (!next) {
-        apply(saved.mode, saved.shade);
+        const stored = getAppearanceSnapshot();
+        apply(stored.appearance, stored.accent);
         return;
       }
-      const resolved = resolveAppearance(next.mode, next.shade ?? familyById(next.mode).defaultShade);
-      apply(resolved.mode, resolved.shadeId);
+      apply(saved.appearance, next);
     },
-    [apply, saved.mode, saved.shade],
+    [apply, saved.appearance],
   );
 
-  const commit = useCallback(
-    (next: { mode: string; shade?: string }) => {
-      const resolved = resolveAppearance(next.mode, next.shade ?? familyById(next.mode).defaultShade);
-      apply(resolved.mode, resolved.shadeId);
-      writeAppearance(resolved.mode, resolved.shadeId);
+  const commitAppearance = useCallback(
+    (next: AppearanceId) => {
+      apply(next, saved.accent);
+      writeAppearance(next, saved.accent);
     },
-    [apply],
+    [apply, saved.accent],
+  );
+
+  const commitAccent = useCallback(
+    (next: AccentId) => {
+      apply(saved.appearance, next);
+      writeAppearance(saved.appearance, next);
+    },
+    [apply, saved.appearance],
   );
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ ...saved, theme: saved.mode, setPreview, commit }),
-    [commit, saved, setPreview],
+    () => ({
+      appearance: saved.appearance,
+      accent: saved.accent,
+      scheme: saved.appearance,
+      setPreviewAccent,
+      commitAppearance,
+      commitAccent,
+    }),
+    [commitAccent, commitAppearance, saved.accent, saved.appearance, setPreviewAccent],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

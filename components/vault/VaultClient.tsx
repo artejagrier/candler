@@ -10,6 +10,7 @@ import { observeCopy } from "@/lib/product/client-security";
 import { vaultSearchHaystack, vaultUserError, type VaultPendingAuth } from "@/lib/vault/client-copy";
 import { StepUpDialog } from "@/components/product/StepUpDialog";
 import { VaultDialog } from "@/components/vault/VaultDialog";
+import { SmartImportDialog } from "@/components/vault/SmartImportDialog";
 
 type Project = { id: string; name: string; environments: { id: string; name: string; kind: string }[] };
 type Secret = {
@@ -20,6 +21,7 @@ type Secret = {
   rotate_at: string | null;
   updated_at: string;
   project_id: string | null;
+  environment_id: string | null;
   projects: { name: string } | null;
   environments: { name: string } | null;
   services: { name: string } | null;
@@ -47,6 +49,7 @@ export function VaultClient({
   const [envOpen, setEnvOpen] = useState(false);
   const [envText, setEnvText] = useState("");
   const [deselected, setDeselected] = useState<Record<string, boolean>>({});
+  const [smartOpen, setSmartOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [pendingAuth, setPendingAuth] = useState<VaultPendingAuth | null>(null);
   const [busy, setBusy] = useState<BusyKey>(null);
@@ -223,6 +226,8 @@ export function VaultClient({
     setOpen(true);
   }
 
+  // kept for .env import fallback; primary path is Smart Import
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function openImport() {
     const projectId = projectFilter || first?.id || "";
     const environments = projects.find((project) => project.id === projectId)?.environments ?? [];
@@ -232,6 +237,11 @@ export function VaultClient({
     setDeselected({});
     setMessage("");
     setEnvOpen(true);
+  }
+
+  function openSmartImport() {
+    setMessage("");
+    setSmartOpen(true);
   }
 
   function showCreatedRow(input: {
@@ -252,6 +262,7 @@ export function VaultClient({
       rotate_at: null,
       updated_at: new Date().toISOString(),
       project_id: input.projectId,
+      environment_id: input.environmentId,
       projects: project ? { name: project.name } : null,
       environments: environment ? { name: environment.name } : null,
       services: { name: input.serviceName },
@@ -455,14 +466,40 @@ export function VaultClient({
         ) : null}
         <Link className="quiet-link" href="/app/vault/recovery">Recovery</Link>
         <div className="flex gap-2">
-          <button type="button" className="secondary-button" onClick={openImport} disabled={!projects.length}><Upload />Import .env</button>
+          <button type="button" className="secondary-button" onClick={openSmartImport} disabled={!projects.length}><Upload />Smart Import</button>
           <button type="button" className="primary-button" onClick={openAdd} disabled={!projects.length}><Plus />Add secret</button>
         </div>
       </div>
+      {/* Project context — shows which project is in scope */}
+      {projects.length > 0 && (
+        <div className="vault-project-strip">
+          <span className="vault-project-strip-for">Secrets for</span>
+          {projects.length === 1 ? (
+            <strong>{projects[0].name}</strong>
+          ) : (
+            <select
+              className="vault-project-inline-select"
+              value={projectFilter || ""}
+              onChange={(e) => onProjectFilter(e.target.value)}
+              aria-label="Select project"
+            >
+              <option value="">All projects</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+          {environmentFilter && <><span className="vault-project-strip-sep">·</span><span>{environmentFilter}</span></>}
+          {projects.length > 1 && (
+            <span className="vault-project-strip-hint">
+              {projectFilter ? `${visible.length} secret${visible.length !== 1 ? "s" : ""}` : `${rows.length} across ${projects.length} projects`}
+            </span>
+          )}
+        </div>
+      )}
+
       {visible.length === 0 ? (
         <div className="empty-state">
           <h2>{rows.length ? "No matching secrets." : "No secrets yet."}</h2>
-          <p>{projects.length ? "Add a credential or import a .env file." : "Create a project before adding credentials."}</p>
+          <p>{projects.length ? "Add a credential or import a .env file, or use Smart Import." : "Create a project before adding credentials."}</p>
         </div>
       ) : (
         <div className="table-wrap vault-table">
@@ -680,6 +717,17 @@ export function VaultClient({
         <StepUpDialog
           onClose={() => setPendingAuth(null)}
           onVerified={resumeAfterStepUp}
+        />
+      ) : null}
+
+      {smartOpen ? (
+        <SmartImportDialog
+          open
+          onClose={() => setSmartOpen(false)}
+          onImported={() => { setSmartOpen(false); router.refresh(); }}
+          projects={projects}
+          secrets={rows}
+          defaultProjectId={projectFilter || first?.id}
         />
       ) : null}
     </>

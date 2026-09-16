@@ -1,8 +1,12 @@
+"use client";
+
 import { Surface } from "@/components/ui/Surface";
+import { useModShortcutLabel } from "@/components/ui/ModShortcut";
 import { FEATURES, type Feature } from "@/config/marketing";
 
 /** Grid of product capabilities. Defaults to the full feature set. */
 export function FeatureGrid({ items = FEATURES }: { items?: Feature[] }) {
+  const modK = useModShortcutLabel("K");
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((feature) => {
@@ -19,7 +23,7 @@ export function FeatureGrid({ items = FEATURES }: { items?: Feature[] }) {
               {feature.title}
             </h3>
             <p className="text-sm leading-relaxed text-fog">
-              {feature.description}
+              {feature.description.replaceAll("{modK}", modK)}
             </p>
           </Surface>
         );

@@ -26,7 +26,7 @@ interface BadgeProps {
 }
 
 const TONES: Record<BadgeTone, { classes: string; icon: LucideIcon }> = {
-  neutral: { classes: "bg-white/6 text-fog border-line", icon: Circle },
+  neutral: { classes: "bg-[color-mix(in_srgb,var(--color-foreground)_6%,transparent)] text-fog border-line", icon: Circle },
   purple: {
     classes: "bg-purple/15 text-lavender border-line-strong",
     icon: Circle,

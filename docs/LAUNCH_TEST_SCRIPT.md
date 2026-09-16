@@ -1,7 +1,7 @@
 # Candler launch test script
 
-Run this against a non-production Supabase project, private R2 bucket, Stripe
-test mode, and a dedicated Agent project before promoting the same configuration.
+Run this against a non-production Supabase project, private R2 bucket, Paddle
+sandbox, and a dedicated Agent project before promoting the same configuration.
 
 1. Apply migrations `0001` through `0005`; confirm every migration succeeds.
 2. Create an account, verify its email, sign in, and confirm `/app` opens onboarding.
@@ -21,18 +21,18 @@ test mode, and a dedicated Agent project before promoting the same configuration
 16. Upload a folder in a supporting browser; confirm relative paths. Confirm ordinary uploads still work where folder selection is unsupported.
 17. Rename and move files/folders. Trash and restore them. Permanently delete a trashed test file only after confirmation and confirm the private object is removed.
 18. Attempt a file above the configured limit, over quota, and more than 20 authorizations in one minute; confirm rejection.
-19. Subscribe to Candler Pro in Stripe test mode. Ignore the success redirect until the verified webhook updates Billing.
+19. Subscribe to Candler Pro using Paddle sandbox checkout overlay. Wait for the verified webhook to update Billing before checking entitlements.
 20. Subscribe/change Cloud 500 and Cloud 1TB; confirm database quota changes only after webhooks.
-21. Open Billing Portal, change payment method, cancel/reactivate where safe, and confirm entitlement reconciliation.
-22. Replay a webhook event. Confirm `stripe_webhook_events` prevents duplicate provisioning.
+21. Open Billing Portal (Paddle customer portal), change payment method, cancel/reactivate where safe, and confirm entitlement reconciliation.
+22. Replay a webhook event. Confirm `paddle_webhook_events` prevents duplicate provisioning.
 23. Run `npm run test:rls` with two dedicated users. Confirm all isolation assertions pass.
 24. As User B, manually request User A reveal, authenticator, recovery, Cloud download, and Agent resources by ID; confirm 404/403 and no signed URL.
 25. Change/reset password, enroll MFA, complete MFA login, sign out, and exercise logout-all if enabled in the Supabase project.
 26. Search for project names, secret names, services, files/folders, and Agent titles. Search for a raw secret value and confirm no result.
 27. Review Activity and confirm every sensitive operation is present with no credential values/codes.
 28. Test desktop widths 1440 and 1280, tablet 1024 and 768, and mobile 390. Check dialogs, tables, upload controls, Agent, billing, and mobile navigation.
-29. In development, use the protected preview control to test Morning/Sunrise, Afternoon/Day, Evening/Sunset, and Night. Confirm contrast without changing the protected sky.
-30. At Night, confirm stars, twinkle, cloud behavior, shooting star, reduced-motion behavior, and state transitions.
+29. In Settings → Appearance, switch Light and Dark. Confirm the workspace, sidebar, dialogs, and forms follow the selected appearance on the first click.
+30. Preview and save each accent color. Confirm interactive states follow the accent while success/warning/danger stay semantic, then reload to confirm persistence.
 31. Run `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm audit`.
 32. Call `/api/health`; production promotion requires HTTP 200 without revealing any environment values.
 

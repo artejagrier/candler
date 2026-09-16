@@ -37,6 +37,7 @@ const FOOTER_COLUMNS: { heading: string; links: { label: string; href: string }[
       links: [
         { label: "Privacy", href: "/privacy" },
         { label: "Terms", href: "/terms" },
+        { label: "Refund Policy", href: "/refund" },
         { label: "Acceptable Use", href: "/acceptable-use" },
       ],
     },
