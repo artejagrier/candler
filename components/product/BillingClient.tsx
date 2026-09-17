@@ -22,6 +22,9 @@ export function BillingClient({
   hasCustomer,
   configured,
   autoPlan,
+  planTitle,
+  planQuota,
+  statusFacts,
 }: {
   proActive: boolean;
   cloudPlan: string;
@@ -30,6 +33,9 @@ export function BillingClient({
   hasCustomer: boolean;
   configured: boolean;
   autoPlan?: Product;
+  planTitle: string;
+  planQuota: string;
+  statusFacts: string[];
 }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -135,10 +141,10 @@ export function BillingClient({
 
       <div className="storage-meter">
         <span>
-          <b>Storage</b>
+          <b>{planTitle}</b>
           <small>
-            {(usedBytes / 1024 ** 3).toFixed(2)} GB of {(quotaBytes / 1024 ** 3).toFixed(0)} GB used · Pro features{" "}
-            {proActive ? "active" : "inactive"}
+            {(usedBytes / 1024 ** 3).toFixed(2)} GB of {planQuota} used
+            {statusFacts.length > 0 ? ` · ${statusFacts.join(" · ")}` : ""}
           </small>
         </span>
         <div>
