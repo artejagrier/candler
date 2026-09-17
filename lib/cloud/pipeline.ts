@@ -1,5 +1,10 @@
-import { PUT_CONCURRENCY_DEFAULT, PUT_CONCURRENCY_MAX, PUT_CONCURRENCY_MIN } from "@/lib/cloud/limits";
-import { percentile } from "@/lib/cloud/stats";
+import { AUTHORIZE_BATCH_SIZE, FIRST_AUTHORIZE_BATCH, PUT_CONCURRENCY_DEFAULT, PUT_CONCURRENCY_MAX, PUT_CONCURRENCY_MIN } from "@/lib/cloud/limits";
+import { chunk, percentile } from "@/lib/cloud/stats";
+
+export function authorizeBatches<T>(items: T[]) {
+  if (items.length <= AUTHORIZE_BATCH_SIZE) return chunk(items, AUTHORIZE_BATCH_SIZE);
+  return [items.slice(0, FIRST_AUTHORIZE_BATCH), ...chunk(items.slice(FIRST_AUTHORIZE_BATCH), AUTHORIZE_BATCH_SIZE)];
+}
 
 export async function runPipelinedBatches<TAuth, TUploaded>(
   batchCount: number,

@@ -14,7 +14,7 @@ const input = z.object({
   filename: z.string().trim().min(1).max(512),
   relativePath: z.string().max(2048).nullable().optional(),
   contentType: z.string().min(1).max(255),
-  size: z.number().int().positive(),
+  size: z.number().int().nonnegative(),
   checksumSha256: checksumSha256Schema,
 }).strict();
 

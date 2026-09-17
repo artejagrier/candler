@@ -20,6 +20,7 @@ test("batch authorize schema rejects spoofed identity, quota, and object keys", 
     }],
   };
   assert.equal(uploadBatchInput.parse(valid).files.length, 1);
+  assert.equal(uploadFileDescriptor.parse({ ...valid.files[0], size: 0 }).size, 0);
   assert.throws(() => uploadBatchInput.parse({ ...valid, usedBytes: 0 }));
   assert.throws(() => uploadBatchInput.parse({ ...valid, plan: "cloud1tb" }));
   assert.throws(() => uploadBatchInput.parse({ ...valid, userId: "00000000-0000-0000-0000-000000000000" }));
@@ -100,6 +101,18 @@ test("adaptive put concurrency stays inside 4-8 and drops on 429", () => {
   assert.equal(raised, 7);
   assert.equal(raised <= PUT_CONCURRENCY_MAX, true);
   assert.equal(nextPutConcurrency(8, 0, [9000, 9100, 9200, 9300]), 7);
+});
+
+test("large folders authorize a small first batch so uploads can start immediately", async () => {
+  const { authorizeBatches } = await import("../lib/cloud/pipeline");
+  const { FIRST_AUTHORIZE_BATCH, AUTHORIZE_BATCH_SIZE } = await import("../lib/cloud/limits");
+  const small = authorizeBatches(Array.from({ length: 20 }, (_, i) => i));
+  assert.equal(small.length, 1);
+  assert.equal(small[0]?.length, 20);
+  const large = authorizeBatches(Array.from({ length: 20_652 }, (_, i) => i));
+  assert.equal(large[0]?.length, FIRST_AUTHORIZE_BATCH);
+  assert.equal(large[1]?.length, AUTHORIZE_BATCH_SIZE);
+  assert.equal(large.reduce((sum, batch) => sum + batch.length, 0), 20_652);
 });
 
 test("pipelined batches authorize the next group while the current group uploads", async () => {

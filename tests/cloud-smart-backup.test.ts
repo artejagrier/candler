@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   classifyBackupPaths,
   isSmartIgnored,
-  skipReasonSummary,
   skippedFileCount,
   smartIgnoreReason,
 } from "../lib/cloud/smart-ignore";
@@ -37,39 +36,30 @@ const tree = [
   "demo/.turbo/cache/x",
   "demo/.vercel/project.json",
   "demo/.git/config",
+  "demo/.env",
+  "demo/.env.local",
   "demo/.DS_Store",
   "demo/src/.DS_Store",
 ];
 
-test("Smart Backup skips generated directories and keeps source", () => {
-  const { keep, skipped, scanned } = classifyBackupPaths(tree, true);
+test("default backup keeps every discovered file including git, generated, env, and OS junk", () => {
+  const { keep, skipped, scanned } = classifyBackupPaths(tree);
   assert.equal(scanned, tree.length);
+  assert.equal(skipped.length, 0);
+  assert.equal(keep.length, tree.length);
   assert.equal(keep.includes("demo/package.json"), true);
-  assert.equal(keep.includes("demo/package-lock.json"), true);
-  assert.equal(keep.includes("demo/src/app/page.tsx"), true);
-  assert.equal(keep.includes("demo/public/hero.png"), true);
-  assert.equal(keep.includes("demo/README.md"), true);
-  assert.equal(keep.includes("demo/config/example.json"), true);
-  assert.equal(keep.some((path) => path.includes("node_modules")), false);
-  assert.equal(keep.some((path) => path.includes(".next")), false);
-  assert.equal(keep.some((path) => path.includes(".git")), false);
-  assert.equal(isSmartIgnored("demo/node_modules/locate-path/index.js"), true);
-  assert.equal(smartIgnoreReason("demo/.next/cache/webpack/file"), ".next");
-  assert.equal(smartIgnoreReason("demo/.git/config"), ".git");
-  assert.equal(skippedFileCount(skipped) > 0, true);
-  const labels = skipReasonSummary(skipped).map((item) => item.label);
-  assert.equal(labels.includes("node_modules"), true);
-  assert.equal(labels.includes(".next"), true);
-  assert.equal(labels.includes(".git cache"), true);
-  assert.equal(labels.includes(".DS_Store"), true);
-});
-
-test("Smart Backup can be disabled to include generated files, but OS junk stays excluded", () => {
-  const { keep, skipped } = classifyBackupPaths(tree, false);
   assert.equal(keep.includes("demo/node_modules/locate-path/index.js"), true);
-  assert.equal(keep.includes("demo/.DS_Store"), false);
-  assert.equal(keep.includes("demo/src/.DS_Store"), false);
-  assert.equal(skipped.every((item) => item.reason === ".ds_store"), true);
+  assert.equal(keep.includes("demo/.next/cache/webpack/file"), true);
+  assert.equal(keep.includes("demo/.git/config"), true);
+  assert.equal(keep.includes("demo/.env"), true);
+  assert.equal(keep.includes("demo/.env.local"), true);
+  assert.equal(keep.includes("demo/.DS_Store"), true);
+  assert.equal(keep.includes("demo/src/.DS_Store"), true);
+  assert.equal(isSmartIgnored("demo/node_modules/locate-path/index.js"), false);
+  assert.equal(smartIgnoreReason("demo/.next/cache/webpack/file"), null);
+  assert.equal(smartIgnoreReason("demo/.git/config"), null);
+  assert.equal(smartIgnoreReason("demo/.DS_Store"), null);
+  assert.equal(skippedFileCount(skipped), 0);
 });
 
 test("retry delay honors Retry-After seconds and exponential fallback", () => {
@@ -139,6 +129,26 @@ test("fetchWithRetry honors 429 Retry-After then succeeds", async () => {
   }
 });
 
+test("fetchWithRetry times out a hung PUT instead of waiting forever", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (_input, init) => {
+    await new Promise<void>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        reject(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+      }, { once: true });
+    });
+    return new Response("ok");
+  }) as typeof fetch;
+  try {
+    await assert.rejects(
+      () => fetchWithRetry("https://candler.test/put", { method: "PUT" }, { timeoutMs: 30, retries: 1 }),
+      /timed out/i,
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("cloud browser keeps per-file authorize and finalize without page reloads", () => {
   const source = readFileSync(new URL("../components/cloud/CloudBrowser.tsx", import.meta.url), "utf8");
   assert.equal(source.includes("/api/cloud/upload/batch-authorize"), true);
@@ -150,11 +160,16 @@ test("cloud browser keeps per-file authorize and finalize without page reloads",
   assert.equal(source.includes("body: entry.bytes"), false);
   assert.equal(source.includes("Upload Folder"), true);
   assert.equal(source.includes("<Upload />Upload"), false);
+  assert.equal(source.includes("Include ignored/generated files"), false);
+  assert.equal(source.includes("includeGenerated"), false);
+  assert.equal(source.includes("systemJunkReason"), false);
   assert.equal(source.includes("retryFailed"), true);
-  assert.equal(source.includes("describeTransferFailure"), true);
+  assert.equal(source.includes("describeEta"), true);
+  assert.equal(source.includes("putTimeoutMs"), true);
+  assert.equal(source.includes("authorizeBatches"), true);
 });
 
-test("demo fixture skips node_modules and .next while keeping source", async () => {
+test("demo fixture keeps node_modules, .next, and every other discovered file", async () => {
   const root = new URL("../fixtures/cloud-smart-backup-demo", import.meta.url);
   async function walk(dir: string, prefix: string): Promise<string[]> {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -167,14 +182,11 @@ test("demo fixture skips node_modules and .next while keeping source", async () 
     return paths;
   }
   const relativePaths = await walk(root.pathname, "candler-cloud-test");
-  const { keep, skipped } = classifyBackupPaths(relativePaths, true);
+  const { keep, skipped } = classifyBackupPaths(relativePaths);
   assert.equal(keep.includes("candler-cloud-test/package.json"), true);
   assert.equal(keep.includes("candler-cloud-test/src/app/page.tsx"), true);
-  assert.equal(keep.includes("candler-cloud-test/src/components/Navbar.tsx"), true);
-  assert.equal(keep.includes("candler-cloud-test/public/hero.txt"), true);
-  assert.equal(keep.includes("candler-cloud-test/README.md"), true);
-  assert.equal(keep.some((path) => path.includes("node_modules")), false);
-  assert.equal(keep.some((path) => path.includes(".next")), false);
-  assert.equal(skipped.some((item) => item.reason === "node_modules"), true);
-  assert.equal(skipped.some((item) => item.reason === ".next"), true);
+  assert.equal(keep.some((path) => path.includes("node_modules")), true);
+  assert.equal(keep.some((path) => path.includes(".next")), true);
+  assert.equal(skipped.length, 0);
+  assert.equal(keep.length, relativePaths.length);
 });

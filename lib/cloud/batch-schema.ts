@@ -17,7 +17,7 @@ export const uploadFileDescriptor = z.object({
   filename: z.string().trim().min(1).max(512),
   relativePath: relativePathSchema,
   contentType: z.string().min(1).max(255),
-  size: z.number().int().positive(),
+  size: z.number().int().nonnegative(),
   checksumSha256: checksumSha256Schema,
 }).strict();
 

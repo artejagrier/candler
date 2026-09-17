@@ -2,9 +2,10 @@
  * Browser-only helpers for Cloud file/folder pickers and drag-drop.
  * Does not talk to R2, quotas, or status — callers still use the
  * authorize → PUT → finalize pipeline.
+ * Every browser-exposed file is eligible. Read failures are errors, not exclusions.
  */
 
-import { smartIgnoreReason, type SkipRecord } from "@/lib/cloud/smart-ignore";
+import type { SkipRecord } from "@/lib/cloud/smart-ignore";
 
 export type UploadSource = {
   file: File;
@@ -40,7 +41,7 @@ export function sourcesFromFileList(list: FileList | File[] | null | undefined):
 export function describeReadError(error: unknown, label: string) {
   const raw = error instanceof Error ? error.message : String(error);
   if (/could not be found at the time an operation was processed/i.test(raw)) {
-    return `Could not read “${label}”. Chrome cannot treat a folder as a single file — drop the folder onto Cloud, or use Upload folder and select the directory itself.`;
+    return `Could not read “${label}”. Chrome cannot treat a folder as a single file — drop the folder onto Cloud, or use Upload Folder and select the directory itself.`;
   }
   return `Could not read “${label}”: ${raw}`;
 }
@@ -61,42 +62,20 @@ async function readAllDirectoryEntries(reader: FileSystemDirectoryReader): Promi
   return all;
 }
 
-async function countNestedFiles(entry: FileSystemDirectoryEntry): Promise<number> {
-  const children = await readAllDirectoryEntries(entry.createReader());
-  let total = 0;
-  for (const child of children) {
-    if (child.isDirectory) total += await countNestedFiles(child as FileSystemDirectoryEntry);
-    else total += 1;
-  }
-  return total;
-}
-
 async function collectEntry(
   entry: FileSystemEntry,
   parentPath: string,
   out: UploadSource[],
   errors: string[],
-  skipped: SkipRecord[],
-  smartIgnore: boolean,
 ): Promise<void> {
   const rel = entryPath(parentPath, entry.name);
-  const reason = smartIgnoreReason(rel, { includeGenerated: !smartIgnore });
-  if (reason) {
-    if (entry.isDirectory) {
-      const count = await countNestedFiles(entry as FileSystemDirectoryEntry);
-      skipped.push({ relativePath: rel, reason, count: Math.max(count, 1) });
-    } else {
-      skipped.push({ relativePath: rel, reason });
-    }
-    return;
-  }
   if (entry.isDirectory) {
     try {
       const reader = (entry as FileSystemDirectoryEntry).createReader();
       const children = await readAllDirectoryEntries(reader);
       if (!children.length) return;
       for (const child of children) {
-        await collectEntry(child, rel, out, errors, skipped, smartIgnore);
+        await collectEntry(child, rel, out, errors);
       }
     } catch (error) {
       errors.push(describeReadError(error, rel));
@@ -129,14 +108,11 @@ export function captureDroppedEntries(dataTransfer: DataTransfer): FileSystemEnt
 
 export async function sourcesFromEntries(
   entries: FileSystemEntry[],
-  options?: { smartIgnore?: boolean },
 ): Promise<{ sources: UploadSource[]; errors: string[]; skipped: SkipRecord[] }> {
   const sources: UploadSource[] = [];
   const errors: string[] = [];
-  const skipped: SkipRecord[] = [];
-  const smartIgnore = options?.smartIgnore !== false;
   for (const entry of entries) {
-    await collectEntry(entry, "", sources, errors, skipped, smartIgnore);
+    await collectEntry(entry, "", sources, errors);
   }
-  return { sources, errors, skipped };
+  return { sources, errors, skipped: [] };
 }

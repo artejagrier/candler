@@ -19,8 +19,6 @@ import {
 } from "@/lib/cloud/browser-files";
 import {
   rootLabel,
-  skippedFileCount,
-  smartIgnoreReason,
   type SkipRecord,
 } from "@/lib/cloud/smart-ignore";
 import {
@@ -31,14 +29,15 @@ import {
   fetchWithRetry,
   formatAuthorizeTimings,
   isUsableUploadUrl,
+  putTimeoutMs,
   runPool,
   type AuthorizeServerTimings,
   type TransferItem,
   type TransferProfile,
 } from "@/lib/cloud/transfer";
-import { AUTHORIZE_BATCH_SIZE } from "@/lib/cloud/limits";
-import { runPipelinedBatches, nextPutConcurrency, initialPutConcurrency } from "@/lib/cloud/pipeline";
-import { averageMs, chunk, percentile, smoothEta } from "@/lib/cloud/stats";
+import { runPipelinedBatches, nextPutConcurrency, initialPutConcurrency, authorizeBatches } from "@/lib/cloud/pipeline";
+import { averageMs, describeEta, percentile } from "@/lib/cloud/stats";
+import { summarizeBackup } from "@/lib/cloud/backup-state";
 import { CloudTransfer } from "@/components/cloud/CloudTransfer";
 import { CloudLibrary, trashMenuItems } from "@/components/cloud/CloudLibrary";
 import { CloudActionMenu } from "@/components/cloud/CloudActionMenu";
@@ -88,6 +87,8 @@ type TransferState = {
   unchanged: number;
   items: TransferItem[];
   etaSeconds: number | null;
+  etaLabel: string | null;
+  stalled: boolean;
   profile: TransferProfile | null;
 };
 
@@ -130,9 +131,16 @@ export function CloudBrowser({
   const mountedRef = useRef(true);
   const keepRef = useRef<UploadSource[]>([]);
   const transferRef = useRef<TransferState | null>(null);
+  const itemsRef = useRef<TransferItem[]>([]);
+  const itemIndexRef = useRef(new Map<string, number>());
+  const flushTimerRef = useRef<number | null>(null);
+  const lastProgressAtRef = useRef(0);
+  const transferStartedRef = useRef(0);
+  const etaSecondsRef = useRef<number | null>(null);
+  const putBytesRef = useRef(0);
+  const putCountRef = useRef(0);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  const [includeGenerated, setIncludeGenerated] = useState(false);
   const [transfer, setTransfer] = useState<TransferState | null>(null);
   const [view, setView] = useState<"files" | "trash">("files");
   const [trashed, setTrashed] = useState<Trashed | null>(null);
@@ -173,26 +181,77 @@ export function CloudBrowser({
     else setStatus(body.error ?? "Trash could not be loaded.");
   }
 
-  function patchItem(id: string, patch: Partial<TransferItem>) {
+  function etaFromItems(items: TransferItem[]) {
+    const summary = summarizeBackup(items, cancelledRef.current);
+    const now = performance.now();
+    return describeEta({
+      wallMs: Math.max(0, now - transferStartedRef.current),
+      now,
+      lastProgressAt: lastProgressAtRef.current || now,
+      bytesUploaded: putBytesRef.current,
+      bytesVerified: summary.bytesVerified,
+      bytesTotal: summary.bytesTotal,
+      filesUploaded: summary.uploaded,
+      filesVerified: summary.verified,
+      filesEligible: summary.eligible,
+      completedPuts: putCountRef.current,
+      previousSeconds: etaSecondsRef.current,
+    });
+  }
+
+  function flushTransfer(extra?: Partial<TransferState>) {
+    if (flushTimerRef.current != null) {
+      window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    const items = itemsRef.current.slice();
+    const eta = etaFromItems(items);
+    etaSecondsRef.current = eta.seconds;
     setTransfer((current) => {
       if (!current) return current;
       return {
         ...current,
-        items: current.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+        items,
+        etaSeconds: eta.seconds,
+        etaLabel: eta.label,
+        stalled: eta.state === "stalled",
+        ...extra,
       };
     });
+  }
+
+  function scheduleFlush() {
+    if (flushTimerRef.current != null) return;
+    flushTimerRef.current = window.setTimeout(() => flushTransfer(), 280);
+  }
+
+  function resetItems(items: TransferItem[]) {
+    itemsRef.current = items;
+    itemIndexRef.current = new Map(items.map((item, index) => [item.id, index]));
+  }
+
+  function patchItem(id: string, patch: Partial<TransferItem>) {
+    const index = itemIndexRef.current.get(id);
+    if (index == null) return;
+    const current = itemsRef.current[index];
+    if (!current) return;
+    itemsRef.current[index] = { ...current, ...patch };
+    if (patch.status === "backed_up" || patch.status === "skipped" || patch.status === "verifying" || patch.status === "failed" || patch.status === "uploading") {
+      lastProgressAtRef.current = performance.now();
+    }
+    scheduleFlush();
   }
 
   function cancelUpload() {
     cancelledRef.current = true;
     abortRef.current?.abort();
-    setTransfer((current) => current ? { ...current, phase: "cancelled" } : current);
+    flushTransfer({ phase: "cancelled" });
   }
 
   function retryFailed() {
     const current = transferRef.current;
     if (!current || busy) return;
-    const failed = new Set(current.items.filter((item) => item.status === "failed").map((item) => item.relativePath));
+    const failed = new Set((itemsRef.current.length ? itemsRef.current : current.items).filter((item) => item.status === "failed").map((item) => item.relativePath));
     const sources = keepRef.current.filter((source) => failed.has(source.relativePath));
     if (!sources.length) return;
     void uploadSources(sources, {
@@ -213,24 +272,17 @@ export function CloudBrowser({
         unchanged: 0,
         items: [],
         etaSeconds: null,
+        etaLabel: null,
+        stalled: false,
         profile: null,
       });
     }
     const skipped: SkipRecord[] = extras?.resume
       ? [...(extras.skipped ?? transferRef.current?.skipped ?? [])]
-      : [...(extras?.skipped ?? [])];
-    let keep: UploadSource[] = [];
-    if (extras?.resume) {
-      keep = selected;
-    } else {
-      for (const source of selected) {
-        const reason = smartIgnoreReason(source.relativePath, { includeGenerated });
-        if (reason) skipped.push({ relativePath: source.relativePath, reason });
-        else keep.push(source);
-      }
-      keepRef.current = keep;
-    }
-    const scanned = extras?.scanned ?? selected.length + skippedFileCount(extras?.skipped ?? []);
+      : [];
+    const keep: UploadSource[] = extras?.resume ? selected : selected;
+    if (!extras?.resume) keepRef.current = keep;
+    const scanned = extras?.scanned ?? selected.length;
     const title = extras?.resume
       ? (transferRef.current?.title ?? rootLabel(keep.map((s) => s.relativePath)))
       : rootLabel([...keep, ...selected].map((s) => s.relativePath));
@@ -246,11 +298,17 @@ export function CloudBrowser({
         size: source.file.size,
         status: "queued",
       }));
+    resetItems(items);
     cancelledRef.current = false;
     abortRef.current = new AbortController();
     const signal = abortRef.current.signal;
     setBusy(true);
     setStatus("");
+    lastProgressAtRef.current = performance.now();
+    transferStartedRef.current = performance.now();
+    etaSecondsRef.current = null;
+    putBytesRef.current = 0;
+    putCountRef.current = 0;
     setTransfer({
       title,
       phase: keep.length ? "uploading" : "done",
@@ -259,11 +317,13 @@ export function CloudBrowser({
       unchanged: extras?.resume ? (transferRef.current?.unchanged ?? 0) : 0,
       items,
       etaSeconds: null,
+      etaLabel: keep.length ? "Calculating time remaining…" : null,
+      stalled: false,
       profile: null,
     });
     if (!keep.length) {
       setBusy(false);
-      setStatus(extras?.errors?.[0] ?? (skipped.length ? "Nothing left to back up after system exclusions." : "Nothing to upload."));
+      setStatus(extras?.errors?.[0] ?? "Nothing to upload.");
       return;
     }
 
@@ -278,13 +338,9 @@ export function CloudBrowser({
       onRetry: () => { counters.retries += 1; },
     };
     let putConcurrency = initialPutConcurrency();
-    let eta: number | null = null;
-    let putBytes = 0;
-    let putElapsed = 0;
-    const transferStarted = performance.now();
     const scanMs = extras?.scanMs ?? 0;
-    const itemByPath = new Map(items.map((item) => [item.relativePath, item]));
-    const batches = chunk(keep, AUTHORIZE_BATCH_SIZE);
+    const idByPath = new Map(items.map((item) => [item.relativePath, item.id]));
+    const batches = authorizeBatches(keep);
 
     type AuthWork = {
       item: TransferItem;
@@ -297,6 +353,8 @@ export function CloudBrowser({
     let authorizeServer: string | undefined;
 
     try {
+      const stallWatch = window.setInterval(() => scheduleFlush(), 2000);
+      try {
       await runPipelinedBatches(batches.length, {
         isCancelled: () => cancelledRef.current,
         authorize: async (index) => {
@@ -305,19 +363,17 @@ export function CloudBrowser({
           const tiny = batch.every((source) => source.file.size < 1_000_000);
           await runPool(batch, tiny ? 8 : 4, async (source) => {
             if (cancelledRef.current) return;
-            const item = itemByPath.get(source.relativePath);
-            if (!item) return;
-            if (source.file.size <= 0) {
-              patchItem(item.id, { status: "failed", error: `“${source.relativePath}” is empty (0 bytes) and was not uploaded.` });
-              return;
-            }
-            if (item.status === "backed_up" || item.status === "skipped") return;
-            patchItem(item.id, { status: "authorizing" });
+            const itemId = idByPath.get(source.relativePath);
+            if (!itemId) return;
+            const live = itemsRef.current[itemIndexRef.current.get(itemId) ?? -1];
+            if (!live) return;
+            if (live.status === "backed_up" || live.status === "skipped") return;
+            patchItem(itemId, { status: "authorizing" });
             const t0 = performance.now();
             const checksumSha256 = await sha256(source.file, source.relativePath, signal);
             hashMs.push(performance.now() - t0);
-            hashed.push({ item, source, checksumSha256 });
-            patchItem(item.id, { checksumSha256 });
+            hashed.push({ item: live, source, checksumSha256 });
+            patchItem(itemId, { checksumSha256 });
           }, () => cancelledRef.current);
           if (cancelledRef.current || !hashed.length) return [] as AuthWork[];
           const t1 = performance.now();
@@ -337,7 +393,7 @@ export function CloudBrowser({
                 })),
               }),
               signal,
-            }, retryOpts);
+            }, { ...retryOpts, timeoutMs: 60_000 });
             const body = await auth.json() as {
               error?: string;
               results?: Array<{ relativePath: string; skipped?: boolean; fileId?: string; uploadUrl?: string; error?: string }>;
@@ -429,7 +485,7 @@ export function CloudBrowser({
                 },
                 body: entry.source.file,
                 signal,
-              }, retryOpts);
+              }, { ...retryOpts, timeoutMs: putTimeoutMs(entry.source.file.size) });
               const elapsed = performance.now() - t0;
               uploadMs.push(elapsed);
               batchPutMs.push(elapsed);
@@ -451,14 +507,9 @@ export function CloudBrowser({
                 });
                 return;
               }
-              putBytes += entry.source.file.size;
-              putElapsed += elapsed;
-              if (putBytes > 0 && putElapsed > 0 && performance.now() - transferStarted > 4000 && uploadMs.length >= 3) {
-                const rate = putBytes / (putElapsed / 1000);
-                const remaining = keep.reduce((sum, source) => sum + source.file.size, 0) - putBytes;
-                eta = smoothEta(eta, remaining / Math.max(rate, 1));
-                setTransfer((current) => current ? { ...current, etaSeconds: eta } : current);
-              }
+              putBytesRef.current += entry.source.file.size;
+              putCountRef.current += 1;
+              lastProgressAtRef.current = performance.now();
               uploaded.push(entry as PutWork);
             } catch (error) {
               if (error instanceof TransferCancelled || cancelledRef.current) return;
@@ -487,7 +538,7 @@ export function CloudBrowser({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ids: uploaded.map((entry) => entry.fileId) }),
             signal,
-          }, retryOpts);
+          }, { ...retryOpts, timeoutMs: 90_000 });
           const body = await final.json() as { error?: string; results?: Array<{ id: string; status: string; error?: string }> };
           finalizeMs.push(performance.now() - t0);
           if (!final.ok) {
@@ -520,11 +571,14 @@ export function CloudBrowser({
           }
         },
       });
+      } finally {
+        window.clearInterval(stallWatch);
+      }
 
-      const totalMs = performance.now() - transferStarted;
+      const totalMs = performance.now() - transferStartedRef.current;
       const profile: TransferProfile = {
         filesFound: scanned,
-        skippedGenerated: skippedFileCount(skipped),
+        skippedGenerated: skipped.length,
         skippedUnchanged: counters.skippedUnchanged,
         uploaded: counters.putRequests,
         failed: 0,
@@ -551,25 +605,27 @@ export function CloudBrowser({
         putConcurrency,
         totalMs,
       };
-      setTransfer((current) => {
-        if (!current) return current;
-        const failedItems = current.items.filter((item) => item.status === "failed");
-        return {
-          ...current,
-          phase: cancelledRef.current ? "cancelled" : "done",
-          unchanged: counters.skippedUnchanged,
-          etaSeconds: null,
-          profile: {
-            ...profile,
-            failed: failedItems.length,
-            failures: failedItems
-              .map((item) => item.error)
-              .filter((error): error is string => Boolean(error)),
-          },
-        };
+      const failedItems = itemsRef.current.filter((item) => item.status === "failed");
+      flushTransfer({
+        phase: cancelledRef.current ? "cancelled" : "done",
+        unchanged: counters.skippedUnchanged,
+        etaSeconds: null,
+        etaLabel: null,
+        stalled: false,
+        profile: {
+          ...profile,
+          failed: failedItems.length,
+          failures: failedItems
+            .map((item) => item.error)
+            .filter((error): error is string => Boolean(error)),
+        },
       });
       if (!cancelledRef.current) router.refresh();
     } finally {
+      if (flushTimerRef.current != null) {
+        window.clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
       setBusy(false);
     }
   }
@@ -591,15 +647,17 @@ export function CloudBrowser({
         unchanged: 0,
         items: [],
         etaSeconds: null,
+        etaLabel: null,
+        stalled: false,
         profile: null,
       });
       try {
         const scanStarted = performance.now();
-        const { sources, errors, skipped } = await sourcesFromEntries(entries, { smartIgnore: !includeGenerated });
+        const { sources, errors, skipped } = await sourcesFromEntries(entries);
         await uploadSources(sources, {
           errors,
           skipped,
-          scanned: sources.length + skippedFileCount(skipped),
+          scanned: sources.length,
           scanMs: Math.round(performance.now() - scanStarted),
         });
       } catch (error) {
@@ -725,13 +783,14 @@ export function CloudBrowser({
   }
 
   const hasContent = visibleFiles.length > 0 || visibleFolders.length > 0;
-  const uploadingCount = (transfer?.items ?? []).filter((item) => item.status === "uploading").length;
-  const verifyingCount = (transfer?.items ?? []).filter((item) => item.status === "verifying").length;
   const currentNames = (transfer?.items ?? [])
     .filter((item) => item.status === "uploading" || item.status === "verifying")
-    .slice(0, 8)
+    .slice(0, 4)
     .map((item) => basename(item.relativePath));
-  const bytesDone = (transfer?.items ?? []).filter((item) => item.status === "backed_up" || item.status === "skipped").reduce((n, item) => n + item.size, 0);
+  const bytesDone = (transfer?.items ?? []).reduce((n, item) => {
+    if (item.status === "backed_up" || item.status === "skipped" || item.status === "verifying") return n + item.size;
+    return n;
+  }, 0);
   const bytesTotal = (transfer?.items ?? []).reduce((n, item) => n + item.size, 0);
 
   return (
@@ -780,11 +839,10 @@ export function CloudBrowser({
           unchanged={transfer.unchanged}
           items={transfer.items}
           current={currentNames}
-          uploadingCount={uploadingCount}
-          verifyingCount={verifyingCount}
-          bytesDone={bytesDone}
+          bytesUploaded={bytesDone}
           bytesTotal={bytesTotal}
-          etaSeconds={transfer.etaSeconds}
+          etaLabel={transfer.etaLabel}
+          stalled={transfer.stalled}
           onCancel={transfer.phase === "uploading" ? cancelUpload : undefined}
           onRetry={transfer.phase === "done" || transfer.phase === "cancelled" ? retryFailed : undefined}
           profile={transfer.profile}
@@ -822,15 +880,6 @@ export function CloudBrowser({
                 void uploadSources(sources, { scanned: sources.length });
               }}
             />
-            <label className="cloud-smart-toggle" title="Leave unchecked for Smart Backup (recommended)">
-              <input
-                type="checkbox"
-                checked={includeGenerated}
-                disabled={busy}
-                onChange={(event) => setIncludeGenerated(event.target.checked)}
-              />
-              Include ignored/generated files
-            </label>
             <button className="secondary-button" disabled={!workspaceId || busy} onClick={() => {
               setDialogValue("");
               setDialog({ type: "create-folder" });
@@ -899,7 +948,7 @@ export function CloudBrowser({
           <div className="empty-state">
             <span className="agent-symbol" style={{ borderColor: "var(--color-line-strong)" }}><CloudUpload /></span>
             <h2>Your cloud is empty.</h2>
-            <p>Drag a project, folder, or file here to back it up. Smart Backup skips node_modules, .next, and other generated directories. OS junk such as .DS_Store is always excluded.</p>
+            <p>Drag a project, folder, or file here to back it up. Candler backs up every file the browser can read from the folder you select.</p>
             <button className="primary-button" disabled={!workspaceId || busy} onClick={openFolderPicker}><FolderInput />Upload Folder</button>
           </div>
         ) : (

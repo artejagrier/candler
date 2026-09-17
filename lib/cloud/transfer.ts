@@ -5,6 +5,28 @@
 
 export const TRANSFER_CONCURRENCY = 4;
 export const TRANSFER_RETRIES = 3;
+export const PUT_TIMEOUT_MIN_MS = 45_000;
+export const PUT_TIMEOUT_MAX_MS = 5 * 60_000;
+
+export function putTimeoutMs(sizeBytes: number) {
+  const size = Math.max(0, Number(sizeBytes) || 0);
+  return Math.min(PUT_TIMEOUT_MAX_MS, Math.max(PUT_TIMEOUT_MIN_MS, 15_000 + size / 25_000));
+}
+
+function combineSignals(user?: AbortSignal, timeout?: AbortSignal) {
+  if (!timeout) return user;
+  if (!user) return timeout;
+  if (typeof AbortSignal.any === "function") return AbortSignal.any([user, timeout]);
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (user.aborted || timeout.aborted) {
+    controller.abort();
+    return controller.signal;
+  }
+  user.addEventListener("abort", onAbort, { once: true });
+  timeout.addEventListener("abort", onAbort, { once: true });
+  return controller.signal;
+}
 
 export type TransferStatus =
   | "queued"
@@ -206,33 +228,41 @@ export async function fetchWithRetry(
   options?: {
     retries?: number;
     signal?: AbortSignal;
+    timeoutMs?: number;
     on429?: () => void;
     onRetry?: () => void;
   },
 ): Promise<Response> {
   const retries = options?.retries ?? TRANSFER_RETRIES;
-  const signal = options?.signal ?? init.signal ?? undefined;
+  const userSignal = options?.signal ?? init.signal ?? undefined;
   let lastError: unknown;
   for (let attempt = 1; attempt <= retries; attempt++) {
-    if (signal?.aborted) throw new TransferCancelled();
+    if (userSignal?.aborted) throw new TransferCancelled();
+    const timeout = options?.timeoutMs && options.timeoutMs > 0 ? AbortSignal.timeout(options.timeoutMs) : undefined;
+    const signal = combineSignals(userSignal, timeout);
     try {
       const response = await fetch(input, { ...init, signal });
       if (response.status === 429) options?.on429?.();
       const retryable = response.status === 429 || response.status >= 500;
       if (retryable && attempt < retries) {
         options?.onRetry?.();
-        await sleep(retryDelayMs(attempt, response.headers.get("Retry-After")), signal);
+        await sleep(retryDelayMs(attempt, response.headers.get("Retry-After")), userSignal);
         continue;
       }
       return response;
     } catch (error) {
       lastError = error;
-      if (error instanceof TransferCancelled || (error instanceof DOMException && error.name === "AbortError")) {
+      if (userSignal?.aborted) throw new TransferCancelled();
+      const timedOut = Boolean(timeout?.aborted);
+      if (!timedOut && (error instanceof TransferCancelled || (error instanceof DOMException && error.name === "AbortError"))) {
         throw new TransferCancelled();
       }
-      if (attempt >= retries) throw error;
+      if (attempt >= retries) {
+        if (timedOut) throw new Error("Upload timed out.");
+        throw error;
+      }
       options?.onRetry?.();
-      await sleep(retryDelayMs(attempt, null), signal);
+      await sleep(retryDelayMs(attempt, null), userSignal);
     }
   }
   throw lastError instanceof Error ? lastError : new Error("Network request failed.");
