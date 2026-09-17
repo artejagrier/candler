@@ -1,15 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { CandlerProgress } from "@/components/ui/CandlerProgress";
-import { PLAN_COPY, formatUsedGb, quotaLabel } from "@/lib/billing/plan-display";
-import type { CloudPlan } from "@/lib/cloud/quota";
 
 type Product = "candler_pro" | "cloud_500" | "cloud_1tb";
 
 const RANK = { free: 0, pro: 1, cloud500: 2, cloud1tb: 3 } as const;
+
+const UPGRADE_LABEL: Record<string, string> = {
+  pro: "Upgrade to Pro",
+  cloud500: "Choose Cloud 500",
+  cloud1tb: "Choose Cloud 1 TB",
+};
 
 export function BillingClient({
   proActive,
@@ -19,9 +22,6 @@ export function BillingClient({
   hasCustomer,
   configured,
   autoPlan,
-  planTitle,
-  planQuota,
-  statusFacts,
 }: {
   proActive: boolean;
   cloudPlan: string;
@@ -30,11 +30,7 @@ export function BillingClient({
   hasCustomer: boolean;
   configured: boolean;
   autoPlan?: Product;
-  planTitle: string;
-  planQuota: string;
-  statusFacts: string[];
 }) {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -47,18 +43,7 @@ export function BillingClient({
     : proActive ? "pro"
     : "free";
 
-  const currentCopy = PLAN_COPY[(current as CloudPlan)] ?? PLAN_COPY.free;
-  const usedGb = formatUsedGb(usedBytes);
-  const quotaText = quotaLabel(quotaBytes);
-  const availableGb = Math.max(0, (quotaBytes - usedBytes) / 1024 ** 3);
-  const availableText = availableGb >= 1000 ? "1 TB available" : `${formatUsedGb(Math.max(0, quotaBytes - usedBytes))} GB available`;
   const pct = quotaBytes ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0;
-
-  function scheduleEntitlementRefresh() {
-    [2500, 6000, 12000].forEach((ms) => {
-      window.setTimeout(() => router.refresh(), ms);
-    });
-  }
 
   async function checkout(product: Product) {
     if (inflight.current) return;
@@ -78,13 +63,11 @@ export function BillingClient({
       }
       if (body.upgraded) {
         setSuccess(true);
-        scheduleEntitlementRefresh();
         setTimeout(() => window.location.reload(), 1500);
         return;
       }
       if (body.transactionId && window.Paddle) {
         window.Paddle.Checkout.open({ transactionId: body.transactionId });
-        scheduleEntitlementRefresh();
       } else {
         setError("Billing overlay could not be opened. Refresh and try again.");
       }
@@ -115,12 +98,6 @@ export function BillingClient({
     void checkout(autoPlan);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const UPGRADE_LABEL: Record<string, string> = {
-    pro: "Upgrade to Pro",
-    cloud500: "Choose Cloud 500",
-    cloud1tb: "Choose Cloud 1 TB",
-  };
 
   function ctaLabel(tileKey: string): string {
     if (current === "free") return UPGRADE_LABEL[tileKey] ?? "Upgrade";
@@ -156,41 +133,23 @@ export function BillingClient({
         <p className="billing-success">Plan updated. Refreshing your workspace…</p>
       )}
 
-      <section className="billing-current" aria-label="Current plan">
+      <div className="storage-meter">
+        <span>
+          <b>Storage</b>
+          <small>
+            {(usedBytes / 1024 ** 3).toFixed(2)} GB of {(quotaBytes / 1024 ** 3).toFixed(0)} GB used · Pro features{" "}
+            {proActive ? "active" : "inactive"}
+          </small>
+        </span>
         <div>
-          <p className="eyebrow">Current plan</p>
-          <h2>{planTitle || currentCopy.title}</h2>
-          <p>{planQuota || currentCopy.quota}</p>
-        </div>
-        {statusFacts.length ? (
-          <ul className="billing-facts">
-            {statusFacts.map((fact) => (
-              <li key={fact}>{fact}</li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-
-      <section className="storage-meter" aria-label="Cloud storage">
-        <div className="storage-meter-copy">
-          <p className="eyebrow">Storage</p>
-          <p className="storage-meter-usage">
-            <b>{usedGb} GB</b>
-            <span> / {quotaText}</span>
-          </p>
-        </div>
-        <div className="storage-meter-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-label="Cloud storage used">
           <i style={{ width: `${pct}%` }} />
         </div>
-        <div className="storage-meter-meta">
-          <small>{availableText}</small>
-          {hasCustomer ? (
-            <button className="bare-button storage-meter-manage" onClick={() => void portal()}>
-              Manage
-            </button>
-          ) : null}
-        </div>
-      </section>
+        {hasCustomer ? (
+          <button className="bare-button" style={{ color: "var(--color-lavender)", fontSize: ".72rem" }} onClick={() => void portal()}>
+            Manage
+          </button>
+        ) : null}
+      </div>
 
       <div className="plan-grid">
         {tiles.map((tile) => {
@@ -217,7 +176,7 @@ export function BillingClient({
                   {ctaLabel(tile.key)}
                 </button>
               ) : (
-                <span className="current-badge current-badge--muted">
+                <span className="current-badge" style={{ color: "var(--color-slate-muted)" }}>
                   Included
                 </span>
               )}
