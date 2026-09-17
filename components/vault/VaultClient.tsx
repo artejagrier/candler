@@ -10,7 +10,11 @@ import { observeCopy } from "@/lib/product/client-security";
 import { vaultSearchHaystack, vaultUserError, type VaultPendingAuth } from "@/lib/vault/client-copy";
 import { StepUpDialog } from "@/components/product/StepUpDialog";
 import { VaultDialog } from "@/components/vault/VaultDialog";
+import { ProtectVaultDialog, UnlockVaultDialog } from "@/components/vault/VaultPhraseDialogs";
 import { SmartImportDialog } from "@/components/vault/SmartImportDialog";
+import { useHideSecretsOnVaultLock, useVaultUnlock } from "@/components/vault/VaultUnlockContext";
+import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase";
+import { readUnlockExpiresAt } from "@/lib/vault/unlock-timer";
 
 type Project = { id: string; name: string; environments: { id: string; name: string; kind: string }[] };
 type Secret = {
@@ -27,16 +31,19 @@ type Secret = {
   services: { name: string } | null;
 };
 
+type PhraseGate = { id: string; intent: VaultPendingAuth["intent"]; stage: "setup" | "unlock" };
 type BusyKey = string | null;
 
 export function VaultClient({
   secrets,
   projects,
   initialProjectId,
+  recoveryPhraseConfigured = false,
 }: {
   secrets: Secret[];
   projects: Project[];
   initialProjectId?: string;
+  recoveryPhraseConfigured?: boolean;
 }) {
   const router = useRouter();
   const [added, setAdded] = useState<Secret[]>([]);
@@ -52,7 +59,11 @@ export function VaultClient({
   const [smartOpen, setSmartOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [pendingAuth, setPendingAuth] = useState<VaultPendingAuth | null>(null);
+  const [phraseGate, setPhraseGate] = useState<PhraseGate | null>(null);
+  const [phraseError, setPhraseError] = useState("");
+  const [phraseConfigured, setPhraseConfigured] = useState(recoveryPhraseConfigured);
   const [busy, setBusy] = useState<BusyKey>(null);
+  const { applyGrant } = useVaultUnlock();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
   const [query, setQuery] = useState("");
@@ -127,6 +138,10 @@ export function VaultClient({
     return () => window.clearTimeout(id);
   }, [revealed]);
 
+  const hideRevealed = useRef(() => setRevealed({}));
+  hideRevealed.current = () => setRevealed({});
+  useHideSecretsOnVaultLock(() => hideRevealed.current(), revealed);
+
   function claim(key: string) {
     if (inflight.current.has(key)) return false;
     inflight.current.add(key);
@@ -148,17 +163,45 @@ export function VaultClient({
     });
   }
 
-  async function requestReveal(id: string, intent: VaultPendingAuth["intent"]) {
-    const response = await fetch(`/api/vault/secrets/${id}/reveal`, { method: "POST" });
-    const body = await response.json().catch(() => ({})) as { value?: string; error?: string; code?: string };
+  async function requestReveal(id: string, intent: VaultPendingAuth["intent"], phrase?: string) {
+    const response = await fetch(`/api/vault/secrets/${id}/reveal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ intent, recoveryPhrase: phrase ?? "" }),
+    });
+    const body = await response.json().catch(() => ({})) as {
+      value?: string;
+      error?: string;
+      code?: string;
+      unlockExpiresAt?: number;
+      unlockServerNow?: number;
+    };
+    const expiresAt = readUnlockExpiresAt(body);
+    if (expiresAt) applyGrant(expiresAt, body.unlockServerNow);
     if (response.status === 403 && body.code === "REAUTH_REQUIRED") {
       setPendingAuth({ id, intent });
       return "auth" as const;
+    }
+    if (body.code === "PHRASE_SETUP_REQUIRED") {
+      setPhraseGate({ id, intent, stage: "setup" });
+      return "setup" as const;
+    }
+    if (body.code === "UNLOCK_REQUIRED") {
+      setPhraseError("");
+      setPhraseGate({ id, intent, stage: "unlock" });
+      return "unlock" as const;
+    }
+    if (body.code === "PHRASE_MISMATCH" || body.code === "PHRASE_THROTTLED") {
+      setPhraseError(body.error ?? VAULT_PHRASE_MISMATCH);
+      setPhraseGate({ id, intent, stage: "unlock" });
+      return "unlock" as const;
     }
     if (!response.ok || !body.value) {
       setMessage(vaultUserError("Unable to reveal secret.", body.error, response.status));
       return null;
     }
+    setPhraseGate(null);
+    setPhraseError("");
     return body.value;
   }
 
@@ -172,7 +215,9 @@ export function VaultClient({
     setMessage("");
     try {
       const value = await requestReveal(id, "reveal");
-      if (value && value !== "auth") setRevealed((current) => ({ ...current, [id]: value }));
+      if (value && value !== "auth" && value !== "setup" && value !== "unlock") {
+        setRevealed((current) => ({ ...current, [id]: value }));
+      }
     } catch {
       setMessage("Unable to reveal secret.");
     } finally {
@@ -193,12 +238,9 @@ export function VaultClient({
     if (!claim(key)) return;
     setMessage("");
     try {
-      let value = revealed[id];
-      if (!value) {
-        const fetched = await requestReveal(id, "copy");
-        if (!fetched || fetched === "auth") return;
-        value = fetched;
-      }
+      const fetched = await requestReveal(id, "copy");
+      if (!fetched || fetched === "auth" || fetched === "setup" || fetched === "unlock") return;
+      const value = fetched;
       await navigator.clipboard.writeText(value);
       void observeCopy("secret.copied", id);
       markCopied(id);
@@ -578,7 +620,7 @@ export function VaultClient({
           </table>
         </div>
       )}
-      {message ? <p className="security-note" role="alert">{message}</p> : <p className="security-note">Values are decrypted only after password confirmation or MFA, and automatically hidden after 15 seconds.</p>}
+      {message ? <p className="security-note" role="alert">{message}</p> : <p className="security-note">Values stay encrypted until you confirm your identity and enter your Vault Phrase. Your Vault stays unlocked for five minutes after a successful unlock. Revealed values hide after 15 seconds or when the Vault locks. Keep important recovery information somewhere secure and separate from Candler—such as a reputable password manager, secure offline storage, or a written copy stored safely.</p>}
 
       {open && first ? (
         <VaultDialog
@@ -717,6 +759,50 @@ export function VaultClient({
         <StepUpDialog
           onClose={() => setPendingAuth(null)}
           onVerified={resumeAfterStepUp}
+        />
+      ) : null}
+
+      {phraseGate?.stage === "setup" ? (
+        <ProtectVaultDialog
+          onClose={() => setPhraseGate(null)}
+          onProtected={() => {
+            const pending = phraseGate;
+            setPhraseConfigured(true);
+            setPhraseGate(null);
+            setMessage("Your Vault is protected.");
+            if (pending.intent === "copy") void copySecret(pending.id);
+            else void revealSecret(pending.id);
+          }}
+        />
+      ) : null}
+
+      {phraseGate?.stage === "unlock" ? (
+        <UnlockVaultDialog
+          busy={busy === `reveal:${phraseGate.id}` || busy === `copy:${phraseGate.id}`}
+          error={phraseError}
+          onClose={() => { setPhraseGate(null); setPhraseError(""); }}
+          onUnlock={(phrase) => {
+            const pending = phraseGate;
+            void (async () => {
+              const key = pending.intent === "copy" ? `copy:${pending.id}` : `reveal:${pending.id}`;
+              if (!claim(key)) return;
+              try {
+                const value = await requestReveal(pending.id, pending.intent, phrase);
+                if (!value || value === "auth" || value === "setup" || value === "unlock") return;
+                if (pending.intent === "copy") {
+                  await navigator.clipboard.writeText(value);
+                  void observeCopy("secret.copied", pending.id);
+                  markCopied(pending.id);
+                } else {
+                  setRevealed((current) => ({ ...current, [pending.id]: value }));
+                }
+              } catch {
+                setMessage(pending.intent === "copy" ? "Unable to copy secret." : "Unable to reveal secret.");
+              } finally {
+                release(key);
+              }
+            })();
+          }}
         />
       ) : null}
 

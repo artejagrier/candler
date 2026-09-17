@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/product/PageHeader";
 import { RecoveryClient } from "@/components/vault/RecoveryClient";
+import { VaultUnlockBar } from "@/components/vault/VaultUnlockBar";
 import { getWorkspaceData } from "@/lib/data/queries";
 import { isSupabaseConfigured } from "@/lib/env";
 import { param, type SearchParams } from "@/lib/utilities/params";
@@ -21,10 +22,12 @@ export default async function RecoveryPage({
         title="Recovery codes"
         description="Encrypted backup codes for when everything else fails."
       />
+      <VaultUnlockBar />
       <RecoveryClient
         sets={(data?.recovery ?? []) as never[]}
         initialService={param(sp, "service")?.slice(0, 120) ?? ""}
         initialAccount={param(sp, "account")?.slice(0, 120) ?? ""}
+        recoveryPhraseConfigured={Boolean(data?.recoveryPhraseConfigured)}
       />
     </>
   );

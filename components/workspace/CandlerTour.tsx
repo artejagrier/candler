@@ -45,7 +45,7 @@ const STEPS: TourStep[] = [
   {
     id: "vault",
     title: "Vault — Secrets, encrypted",
-    body: "API keys, database URLs, tokens. All values are AES-256-GCM encrypted before they leave your browser.",
+    body: "Vault stores API keys and tokens with AES-256-GCM encryption. Your Vault Phrase is the second lock on your Vault. Whenever protected secret material needs to be revealed, Candler asks for this phrase first. You only need one Vault Phrase. Make it something memorable between 12 and 128 characters, such as “What's Your Favorite Scary Movie Sydney?” Your Vault stays unlocked for five minutes after successful verification. You can see the remaining unlock time at the top of Vault, and you can lock your Vault immediately at any time. When the timer expires, protected secret values are hidden again. Write your Vault Phrase down and keep it somewhere safe and separate. Never share it. Candler will never display your Vault Phrase back to you after setup. Candler support will never ask you to send us your Vault Phrase. The Vault Phrase is not the API key stored inside Vault, and it is not your Candler password. Keep important recovery information somewhere secure and separate from Candler—such as a reputable password manager, secure offline storage, or a written copy stored safely.",
     selector: '[href="/app/vault"]',
   },
   {

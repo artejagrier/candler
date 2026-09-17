@@ -106,13 +106,14 @@ export async function smartImportAction(raw: z.input<typeof smartImportInput>): 
   } catch (e) { return fail(e); }
 }
 
-export async function addAuthenticatorAction(raw:{uri?:string;secret?:string;issuer?:string;accountName?:string}):Promise<AuthenticatorAddResult>{
+export async function addAuthenticatorAction(raw:{uri?:string;secret?:string;issuer?:string;accountName?:string;notes?:string}):Promise<AuthenticatorAddResult>{
   try {
     const parsed = parseTotpSetup({ uri: raw.uri, secret: raw.secret, accountName: raw.issuer || raw.accountName });
     const context = await getWorkspaceContext();
     if (!context) throw new Error("Workspace unavailable.");
     const issuer = name.parse(raw.issuer?.trim() || parsed.issuer);
     const account = name.parse(raw.accountName?.trim() || parsed.accountName);
+    const notes = z.string().max(400).optional().parse(raw.notes ?? "") || null;
     const fingerprint = totpSeedFingerprint(parsed.secret);
     const supabase = await createClient();
     const lookup = await supabase
@@ -129,15 +130,27 @@ export async function addAuthenticatorAction(raw:{uri?:string;secret?:string;iss
       owner_id: context.userId,
       issuer,
       account_name: account,
+      notes,
       seed_fingerprint: fingerprint,
       ...encryptedColumns(parsed.secret, "seed"),
     }).select("id").single();
+    if (error && /notes/i.test(error.message ?? "")) {
+      ({ data, error } = await supabase.from("authenticator_entries").insert({
+        workspace_id: context.workspaceId,
+        owner_id: context.userId,
+        issuer,
+        account_name: account,
+        seed_fingerprint: fingerprint,
+        ...encryptedColumns(parsed.secret, "seed"),
+      }).select("id").single());
+    }
     if (error && /seed_fingerprint/i.test(error.message ?? "")) {
       ({ data, error } = await supabase.from("authenticator_entries").insert({
         workspace_id: context.workspaceId,
         owner_id: context.userId,
         issuer,
         account_name: account,
+        notes,
         ...encryptedColumns(parsed.secret, "seed"),
       }).select("id").single());
     }
@@ -176,7 +189,7 @@ export async function addAuthenticatorAction(raw:{uri?:string;secret?:string;iss
     return { ok: false, error: e instanceof Error ? e.message : "The operation could not be completed." };
   }
 }
-export async function renameAuthenticatorAction(id:string,issuer:string,accountName:string):Promise<Result>{try{uuid.parse(id);const context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{error}=await supabase.from("authenticator_entries").update({issuer:name.parse(issuer),account_name:name.parse(accountName),updated_at:new Date().toISOString()}).eq("id",id).eq("workspace_id",context.workspaceId).eq("owner_id",context.userId);if(error)throw new Error("Authenticator could not be renamed.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"authenticator.updated",targetType:"authenticator",targetId:id,metadata:{issuer}});revalidatePath("/app/vault/authenticator");return{ok:true};}catch(e){return fail(e)}}
+export async function renameAuthenticatorAction(id:string,issuer:string,accountName:string,notes?:string):Promise<Result>{try{uuid.parse(id);const context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{error}=await supabase.from("authenticator_entries").update({issuer:name.parse(issuer),account_name:name.parse(accountName),notes:notes?.trim()||null,updated_at:new Date().toISOString()}).eq("id",id).eq("workspace_id",context.workspaceId).eq("owner_id",context.userId);if(error)throw new Error("Authenticator could not be renamed.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"authenticator.updated",targetType:"authenticator",targetId:id,metadata:{issuer}});revalidatePath("/app/vault/authenticator");return{ok:true};}catch(e){return fail(e)}}
 export async function deleteAuthenticatorAction(id:string):Promise<Result>{try{uuid.parse(id);const context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{data}=await supabase.from("authenticator_entries").delete().eq("id",id).eq("workspace_id",context.workspaceId).eq("owner_id",context.userId).select("issuer").maybeSingle();if(!data)throw new Error("Authenticator not found.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"authenticator.deleted",targetType:"authenticator",targetId:id,metadata:{issuer:data.issuer}});revalidatePath("/app/vault/authenticator");return{ok:true};}catch(e){return fail(e)}}
 export async function setAuthenticatorPinnedAction(id:string,pinned:boolean):Promise<Result>{
   try {

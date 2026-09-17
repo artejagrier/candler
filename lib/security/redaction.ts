@@ -1,4 +1,4 @@
-const SENSITIVE_KEYS = /secret|password|token|authorization|cookie|totp|seed|recovery|api[-_]?key|ciphertext|auth[-_]?tag/i;
+const SENSITIVE_KEYS = /secret|password|token|authorization|cookie|totp|seed|recovery|phrase_hash|phrase_salt|recovery.?phrase|api[-_]?key|ciphertext|auth[-_]?tag/i;
 
 export function redactSensitive(input: unknown): unknown {
   if (Array.isArray(input)) return input.map(redactSensitive);

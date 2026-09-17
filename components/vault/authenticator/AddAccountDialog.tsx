@@ -68,6 +68,7 @@ export function AddAccountDialog({
     id: string;
     issuer: string;
     account_name: string;
+    notes?: string | null;
     pinned: boolean;
     last_used_at: string | null;
     created_at: string;
@@ -80,6 +81,7 @@ export function AddAccountDialog({
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [accountName, setAccountName] = useState("");
+  const [notes, setNotes] = useState("");
   const [setupKey, setSetupKey] = useState("");
   const [preview, setPreview] = useState<ParsedTotpSetup | null>(null);
   const [rawUri, setRawUri] = useState("");
@@ -95,6 +97,7 @@ export function AddAccountDialog({
     setDuplicateId(null);
     setBusy(false);
     setAccountName("");
+    setNotes("");
     setSetupKey("");
     setPreview(null);
     setRawUri("");
@@ -238,6 +241,7 @@ export function AddAccountDialog({
         secret: rawUri ? undefined : parsed.secret,
         issuer,
         accountName: account || issuer,
+        notes: notes.trim() || undefined,
       });
       if (!result.ok && result.code === "DUPLICATE" && result.existingId) {
         setDuplicateId(result.existingId);
@@ -253,6 +257,7 @@ export function AddAccountDialog({
         id: result.data.id,
         issuer,
         account_name: account || issuer,
+        notes: notes.trim() || null,
         pinned: false,
         last_used_at: null,
         created_at: now,
@@ -280,6 +285,7 @@ export function AddAccountDialog({
         secret: parsed.secret,
         issuer: parsed.issuer,
         accountName: parsed.accountName,
+        notes: notes.trim() || undefined,
       });
       if (!result.ok && result.code === "DUPLICATE" && result.existingId) {
         setDuplicateId(result.existingId);
@@ -295,6 +301,7 @@ export function AddAccountDialog({
         id: result.data.id,
         issuer: parsed.issuer,
         account_name: parsed.accountName,
+        notes: notes.trim() || null,
         pinned: false,
         last_used_at: null,
         created_at: now,
@@ -429,6 +436,16 @@ export function AddAccountDialog({
               required
             />
           </label>
+          <label>
+            Notes <small>(optional)</small>
+            <input
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Production admin"
+              autoComplete="off"
+              maxLength={400}
+            />
+          </label>
           <button type="button" className="text-link authenticator-paste" onClick={() => void pasteKey()}>Paste</button>
         </form>
       ) : null}
@@ -443,6 +460,16 @@ export function AddAccountDialog({
             </label>
           )}
           <small>{preview.accountName && preview.accountName !== preview.issuer ? preview.accountName : "Ready to add"}</small>
+          <label>
+            Notes <small>(optional)</small>
+            <input
+              value={notes}
+              onChange={(event) => setNotes(event.target.value.slice(0, 400))}
+              placeholder="Work account"
+              autoComplete="off"
+              maxLength={400}
+            />
+          </label>
         </div>
       ) : null}
 

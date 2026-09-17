@@ -136,6 +136,11 @@ try {
       status: "active",
       storage_quota_bytes: 10737418240,
     });
+    await admin.from("vault_recovery_phrases").insert({
+      user_id: userA.id,
+      phrase_hash: "a".repeat(64),
+      salt: "b".repeat(32),
+    });
   }
 
   for (const table of ["projects", "secrets", "authenticator_entries", "recovery_code_sets", "cloud_files", "agent_conversations", "audit_events", "subscriptions"]) {
@@ -203,7 +208,12 @@ try {
     await admin.from("legal_consents").delete().eq("id", consentRow.id);
   }
 
-  console.log("RLS isolation PASS for projects, secrets, authenticator, recovery, cloud, Agent, audit, subscriptions, and legal consents.");
+  const { data: phraseRead } = await a.from("vault_recovery_phrases").select("phrase_hash,salt").eq("user_id", userA.id);
+  assert.equal(phraseRead?.length ?? 0, 0, "Authenticated clients must not read Vault Phrase hashes");
+  const { data: phraseCross } = await b.from("vault_recovery_phrases").select("user_id").eq("user_id", userA.id);
+  assert.equal(phraseCross?.length ?? 0, 0, "User B read User A Vault Phrase row");
+
+  console.log("RLS isolation PASS for projects, secrets, authenticator, recovery, cloud, Agent, audit, subscriptions, legal consents, and vault recovery phrases.");
 } finally {
   if (admin) await admin.from("workspaces").delete().eq("id", workspace.id);
   else await a.from("workspaces").delete().eq("id", workspace.id);

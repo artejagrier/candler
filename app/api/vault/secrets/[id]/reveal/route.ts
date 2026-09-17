@@ -4,13 +4,31 @@ import { createClient } from "@/lib/supabase/server";
 import { decryptSecret, type EncryptedValue } from "@/lib/security/encryption";
 import { emitAuditEvent } from "@/lib/audit/events";
 import { safeErrorResponse } from "@/lib/security/redaction";
+import {
+  authorizeVaultSecretAccess,
+  parseJsonObject,
+  readPhraseIntent,
+  readSubmittedPhrase,
+  readVaultUnlockStatus,
+  vaultPhraseGateResponse,
+  withVaultUnlockStatus,
+} from "@/lib/vault/recovery-phrase-store";
 
-export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const context = await getWorkspaceContext();
   if (!context) return safeErrorResponse("Authentication required.", 401);
   if (!(await hasRecentAuthentication())) {
     return Response.json({ error: "Confirm your password or complete MFA before revealing secrets.", code: "REAUTH_REQUIRED" }, { status: 403 });
   }
+  const body = await parseJsonObject(request);
+  const intent = readPhraseIntent(body, "reveal");
+  const gate = await authorizeVaultSecretAccess({
+    userId: context.userId,
+    workspaceId: context.workspaceId,
+    phrase: readSubmittedPhrase(body),
+    intent: intent === "copy" ? "copy" : "reveal",
+  });
+  if (!gate.ok) return vaultPhraseGateResponse(gate);
   const { id } = await params;
   const supabase = await createClient();
   const { data } = await supabase
@@ -38,7 +56,18 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       targetId: id,
       metadata: { name: data.name },
     });
-    return Response.json({ value, hideAfterSeconds: 15 }, { headers: { "Cache-Control": "no-store", Pragma: "no-cache" } });
+    await emitAuditEvent({
+      workspaceId: context.workspaceId,
+      actorId: context.userId,
+      eventType: intent === "copy" ? "vault_secret_copy_authorized" : "vault_secret_reveal_authorized",
+      targetType: "secret",
+      targetId: id,
+      metadata: { name: data.name },
+    });
+    return Response.json(
+      withVaultUnlockStatus(await readVaultUnlockStatus(context.userId), { value, hideAfterSeconds: 15 }),
+      { headers: { "Cache-Control": "no-store", Pragma: "no-cache" } },
+    );
   } catch {
     return safeErrorResponse("Secret could not be decrypted.", 500);
   }

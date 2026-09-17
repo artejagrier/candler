@@ -19,9 +19,12 @@ export function vaultSearchHaystack(row: {
 
 export function vaultUserError(fallback: string, error?: string, status?: number) {
   if (status === 401) return "Authentication required.";
-  if (status === 403) return error?.includes("password") || error?.includes("MFA")
-    ? (error ?? "Authentication required.")
-    : "Authentication required.";
+  if (status === 403) {
+    if (error?.includes("Vault Phrase") || error?.includes("Recovery Phrase")) return error;
+    if (error?.includes("password") || error?.includes("MFA")) return error ?? "Authentication required.";
+    return "Authentication required.";
+  }
+  if (status === 429 && error?.includes("attempts")) return error;
   if (status === 404) return "You do not have access to this secret.";
   const text = (error ?? "").trim();
   if (/decrypt/i.test(text)) return "Secret could not be decrypted.";

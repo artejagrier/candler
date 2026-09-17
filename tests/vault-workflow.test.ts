@@ -53,7 +53,11 @@ test("Vault client first-click contracts", () => {
   assert.equal(vaultClient.includes("localStorage"), false);
   assert.equal(vaultClient.includes("console.log"), false);
   assert.equal(vaultClient.includes("VaultDialog"), true);
+  assert.equal(vaultClient.includes("ProtectVaultDialog"), true);
+  assert.equal(vaultClient.includes("UnlockVaultDialog"), true);
   assert.equal(vaultClient.includes("vaultSearchHaystack"), true);
+  assert.equal(vaultClient.includes('intent, recoveryPhrase'), true);
+  assert.equal(vaultClient.includes("Leave blank to keep the current value"), true);
 });
 
 test("Vault dialogs portal with scrim, escape, and z-modal classes", () => {
@@ -77,12 +81,14 @@ test("create/update persist ciphertext via encryptSecret and never a plaintext c
   assert.equal(actions.includes("eventType:\"secret.deleted\""), true);
 });
 
-test("reveal is owner- and workspace-scoped, step-up gated, and not cached", () => {
+test("reveal is owner- and workspace-scoped, step-up gated, phrase gated, and not cached", () => {
   assert.equal(reveal.includes("hasRecentAuthentication"), true);
   assert.equal(reveal.includes("REAUTH_REQUIRED"), true);
+  assert.equal(reveal.includes("authorizeVaultSecretAccess"), true);
+  assert.equal(reveal.includes("vault_secret_reveal_authorized"), true);
+  assert.equal(reveal.includes("decryptSecret"), true);
   assert.equal(reveal.includes('.eq("workspace_id", context.workspaceId)'), true);
   assert.equal(reveal.includes('.eq("owner_id", context.userId)'), true);
-  assert.equal(reveal.includes("decryptSecret"), true);
   assert.equal(reveal.includes('eventType: "secret.revealed"'), true);
   assert.equal(reveal.includes("no-store"), true);
   assert.equal(reveal.includes("Secret could not be decrypted."), true);

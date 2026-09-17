@@ -69,7 +69,7 @@ test("seeds stay server-side except the step-up reveal route", () => {
   assert.equal(seedRoute.includes("REAUTH_REQUIRED"), true);
   assert.equal(seedRoute.includes('.eq("owner_id", context.userId)'), true);
   assert.equal(seedRoute.includes('.eq("workspace_id", context.workspaceId)'), true);
-  assert.match(queries, /from\("authenticator_entries"\)\.select\("id,issuer,account_name,pinned,last_used_at,created_at,updated_at"\)/);
+  assert.match(queries, /from\("authenticator_entries"\)\.select\("id,issuer,account_name,notes,pinned,last_used_at,created_at,updated_at"\)/);
   assert.equal(queries.includes("seed_ciphertext"), false);
   assert.equal(queries.includes("seed_fingerprint"), false);
   assert.equal(queries.includes('.eq("owner_id", context.userId)'), true);
@@ -117,6 +117,10 @@ test("multi-device organization stays on the server without a second database", 
   assert.equal(client.includes("Protected by Candler"), true);
   assert.equal(client.includes("Available on your signed-in devices"), true);
   assert.equal(client.includes("backed up"), false);
+  assert.equal(addDialog.includes("Notes"), true);
+  assert.equal(client.includes("authenticator-notes"), true);
+  assert.equal(client.includes("ProtectVaultDialog"), true);
+  assert.equal(seedRoute.includes("authorizeVaultSecretAccess"), true);
   assert.equal(client.includes("Lose your device"), false);
   assert.equal(client.includes("setAuthenticatorPinnedAction"), true);
   assert.equal(client.includes("Recently used"), true);

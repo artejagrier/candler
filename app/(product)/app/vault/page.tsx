@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/product/PageHeader";
 import { VaultClient } from "@/components/vault/VaultClient";
+import { VaultUnlockBar } from "@/components/vault/VaultUnlockBar";
 import { getWorkspaceData } from "@/lib/data/queries";
 import { isSupabaseConfigured } from "@/lib/env";
 
@@ -18,12 +19,14 @@ export default async function VaultPage({
       <PageHeader
         eyebrow="Candler Vault"
         title="Vault"
-        description="Encrypted credentials by project and environment. Values stay sealed until you step up."
+        description="Encrypted credentials by project and environment. Values stay sealed until you confirm your identity and enter your Vault Phrase."
       />
+      <VaultUnlockBar />
       <VaultClient
         secrets={(data?.secrets ?? []) as never[]}
         projects={(data?.projects ?? []) as never[]}
         initialProjectId={project}
+        recoveryPhraseConfigured={Boolean(data?.recoveryPhraseConfigured)}
       />
     </>
   );

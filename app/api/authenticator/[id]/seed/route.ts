@@ -4,8 +4,16 @@ import { createClient } from "@/lib/supabase/server";
 import { decryptSecret, type EncryptedValue } from "@/lib/security/encryption";
 import { emitAuditEvent } from "@/lib/audit/events";
 import { safeErrorResponse } from "@/lib/security/redaction";
+import {
+  authorizeVaultSecretAccess,
+  parseJsonObject,
+  readSubmittedPhrase,
+  readVaultUnlockStatus,
+  vaultPhraseGateResponse,
+  withVaultUnlockStatus,
+} from "@/lib/vault/recovery-phrase-store";
 
-export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const context = await getWorkspaceContext();
   if (!context) return safeErrorResponse("Authentication required.", 401);
   if (!(await hasRecentAuthentication())) {
@@ -14,6 +22,14 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       { status: 403 },
     );
   }
+  const body = await parseJsonObject(request);
+  const gate = await authorizeVaultSecretAccess({
+    userId: context.userId,
+    workspaceId: context.workspaceId,
+    phrase: readSubmittedPhrase(body),
+    intent: "seed",
+  });
+  if (!gate.ok) return vaultPhraseGateResponse(gate);
   const { id } = await params;
   const supabase = await createClient();
   const { data } = await supabase
@@ -40,8 +56,21 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       targetId: id,
       metadata: { issuer: data.issuer },
     });
+    await emitAuditEvent({
+      workspaceId: context.workspaceId,
+      actorId: context.userId,
+      eventType: "vault_secret_reveal_authorized",
+      targetType: "authenticator",
+      targetId: id,
+      metadata: { issuer: data.issuer },
+    });
     return Response.json(
-      { secret, issuer: data.issuer, accountName: data.account_name, hideAfterSeconds: 15 },
+      withVaultUnlockStatus(await readVaultUnlockStatus(context.userId), {
+        secret,
+        issuer: data.issuer,
+        accountName: data.account_name,
+        hideAfterSeconds: 15,
+      }),
       { headers: { "Cache-Control": "no-store", Pragma: "no-cache" } },
     );
   } catch {

@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { createRecoverySetAction, deleteRecoverySetAction } from "@/lib/product/actions";
 import { observeCopy } from "@/lib/product/client-security";
 import { StepUpDialog } from "@/components/product/StepUpDialog";
+import { ProtectVaultDialog, UnlockVaultDialog } from "@/components/vault/VaultPhraseDialogs";
+import { useHideSecretsOnVaultLock, useVaultUnlock } from "@/components/vault/VaultUnlockContext";
+import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase";
+import { readUnlockExpiresAt } from "@/lib/vault/unlock-timer";
 
 type Set = { id: string; service: string; account_name: string; total_count: number; remaining_count: number; updated_at: string };
 
@@ -12,10 +16,12 @@ export function RecoveryClient({
   sets,
   initialService = "",
   initialAccount = "",
+  recoveryPhraseConfigured = false,
 }: {
   sets: Set[];
   initialService?: string;
   initialAccount?: string;
+  recoveryPhraseConfigured?: boolean;
 }) {
   const [revealed, setRevealed] = useState<Record<string, (string | null)[]>>({});
   const [remaining, setRemaining] = useState<Record<string, number>>(Object.fromEntries(sets.map((set) => [set.id, set.remaining_count])));
@@ -23,15 +29,23 @@ export function RecoveryClient({
   const [error, setError] = useState("");
   const [pendingReveal, setPendingReveal] = useState<null | (() => Promise<void>)>(null);
   const [pending, start] = useTransition();
+  const [phraseStage, setPhraseStage] = useState<null | { id: string; stage: "setup" | "unlock" }>(null);
+  const [phraseError, setPhraseError] = useState("");
+  const [unlockBusy, setUnlockBusy] = useState(false);
+  const { applyGrant } = useVaultUnlock();
+  void recoveryPhraseConfigured;
 
   useEffect(() => {
     if (!Object.keys(revealed).length) return;
     const id = setTimeout(() => setRevealed({}), 15_000);
     return () => clearTimeout(id);
   }, [revealed]);
+  const hideRevealed = useRef(() => setRevealed({}));
+  hideRevealed.current = () => setRevealed({});
+  useHideSecretsOnVaultLock(() => hideRevealed.current(), revealed);
 
-  async function reveal(id: string) {
-    if (revealed[id]) {
+  async function reveal(id: string, phrase?: string) {
+    if (revealed[id] && !phrase) {
       setRevealed((current) => {
         const next = { ...current };
         delete next[id];
@@ -39,14 +53,38 @@ export function RecoveryClient({
       });
       return;
     }
-    const response = await fetch(`/api/recovery/${id}/reveal`, { method: "POST" });
-    const body = await response.json() as { codes?: (string | null)[]; error?: string; code?: string };
+    const response = await fetch(`/api/recovery/${id}/reveal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recoveryPhrase: phrase ?? "" }),
+    });
+    const body = await response.json() as {
+      codes?: (string | null)[];
+      error?: string;
+      code?: string;
+      unlockExpiresAt?: number;
+      unlockServerNow?: number;
+    };
+    const expiresAt = readUnlockExpiresAt(body);
+    if (expiresAt) applyGrant(expiresAt, body.unlockServerNow);
     if (response.status === 403 && body.code === "REAUTH_REQUIRED") {
-      setPendingReveal(() => () => reveal(id));
+      setPendingReveal(() => () => reveal(id, phrase));
       return;
     }
-    if (response.ok && body.codes) setRevealed((current) => ({ ...current, [id]: body.codes! }));
-    else setError(body.error ?? "Recovery codes could not be revealed.");
+    if (body.code === "PHRASE_SETUP_REQUIRED") {
+      setPhraseStage({ id, stage: "setup" });
+      return;
+    }
+    if (body.code === "UNLOCK_REQUIRED" || body.code === "PHRASE_MISMATCH" || body.code === "PHRASE_THROTTLED") {
+      setPhraseError(body.code === "UNLOCK_REQUIRED" ? "" : (body.error ?? VAULT_PHRASE_MISMATCH));
+      setPhraseStage({ id, stage: "unlock" });
+      return;
+    }
+    if (response.ok && body.codes) {
+      setPhraseStage(null);
+      setPhraseError("");
+      setRevealed((current) => ({ ...current, [id]: body.codes! }));
+    } else setError(body.error ?? "Recovery codes could not be revealed.");
   }
 
   return (
@@ -168,6 +206,28 @@ export function RecoveryClient({
             const retry = pendingReveal;
             setPendingReveal(null);
             void retry();
+          }}
+        />
+      ) : null}
+      {phraseStage?.stage === "setup" ? (
+        <ProtectVaultDialog
+          onClose={() => setPhraseStage(null)}
+          onProtected={() => {
+            const id = phraseStage.id;
+            setPhraseStage(null);
+            void reveal(id);
+          }}
+        />
+      ) : null}
+      {phraseStage?.stage === "unlock" ? (
+        <UnlockVaultDialog
+          busy={unlockBusy}
+          error={phraseError}
+          onClose={() => { setPhraseStage(null); setPhraseError(""); }}
+          onUnlock={(phrase) => {
+            const id = phraseStage.id;
+            setUnlockBusy(true);
+            void reveal(id, phrase).finally(() => setUnlockBusy(false));
           }}
         />
       ) : null}

@@ -11,11 +11,16 @@ import { StepUpDialog } from "@/components/product/StepUpDialog";
 import { AddAccountDialog } from "@/components/vault/authenticator/AddAccountDialog";
 import { AuthenticatorDialog } from "@/components/vault/authenticator/AuthenticatorDialog";
 import { AuthenticatorMenu } from "@/components/vault/authenticator/AuthenticatorMenu";
+import { ProtectVaultDialog, UnlockVaultDialog } from "@/components/vault/VaultPhraseDialogs";
+import { useHideSecretsOnVaultLock, useVaultUnlock } from "@/components/vault/VaultUnlockContext";
+import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase";
+import { readUnlockExpiresAt } from "@/lib/vault/unlock-timer";
 
 export type AuthenticatorEntry = {
   id: string;
   issuer: string;
   account_name: string;
+  notes?: string | null;
   pinned?: boolean;
   last_used_at?: string | null;
   created_at: string;
@@ -39,7 +44,7 @@ function compareEntries(a: AuthenticatorEntry, b: AuthenticatorEntry, sort: Sort
   return a.issuer.localeCompare(b.issuer) || a.account_name.localeCompare(b.account_name);
 }
 
-export function AuthenticatorClient({ entries }: { entries: AuthenticatorEntry[] }) {
+export function AuthenticatorClient({ entries, recoveryPhraseConfigured = false }: { entries: AuthenticatorEntry[]; recoveryPhraseConfigured?: boolean }) {
   const router = useRouter();
   const [added, setAdded] = useState<AuthenticatorEntry[]>([]);
   const [removedIds, setRemovedIds] = useState<string[]>([]);
@@ -58,12 +63,25 @@ export function AuthenticatorClient({ entries }: { entries: AuthenticatorEntry[]
   const [revealing, setRevealing] = useState<AuthenticatorEntry | null>(null);
   const [revealedSeed, setRevealedSeed] = useState("");
   const [pendingRevealId, setPendingRevealId] = useState<string | null>(null);
+  const [phraseStage, setPhraseStage] = useState<null | { id: string; stage: "setup" | "unlock" }>(null);
+  const [phraseError, setPhraseError] = useState("");
+  const [unlockBusy, setUnlockBusy] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [recoveryHint, setRecoveryHint] = useState<{ issuer: string; account: string } | null>(null);
+  const { applyGrant } = useVaultUnlock();
   const inflight = useRef(new Set<string>());
   const copiedTimer = useRef<number | null>(null);
   const seedTimer = useRef<number | null>(null);
+  const hideSeed = useRef(() => {
+    setRevealedSeed("");
+    setRevealing(null);
+  });
+  hideSeed.current = () => {
+    setRevealedSeed("");
+    setRevealing(null);
+  };
+  useHideSecretsOnVaultLock(() => hideSeed.current(), revealedSeed);
 
   const rows = useMemo(() => {
     const removed = new Set(removedIds);
@@ -77,7 +95,7 @@ export function AuthenticatorClient({ entries }: { entries: AuthenticatorEntry[]
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
-    return rows.filter((row) => `${row.issuer} ${row.account_name}`.toLowerCase().includes(q));
+    return rows.filter((row) => `${row.issuer} ${row.account_name} ${row.notes ?? ""}`.toLowerCase().includes(q));
   }, [rows, query]);
 
   const pinned = visible.filter(isPinned);
@@ -190,20 +208,44 @@ export function AuthenticatorClient({ entries }: { entries: AuthenticatorEntry[]
     }
   }
 
-  async function revealSeed(id: string) {
+  async function revealSeed(id: string, phrase?: string) {
     if (!claim(`reveal:${id}`)) return;
     setMessage("");
     try {
-      const response = await fetch(`/api/authenticator/${id}/seed`, { method: "POST", cache: "no-store" });
-      const body = await response.json() as { secret?: string; error?: string; code?: string };
+      const response = await fetch(`/api/authenticator/${id}/seed`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recoveryPhrase: phrase ?? "" }),
+      });
+      const body = await response.json() as {
+        secret?: string;
+        error?: string;
+        code?: string;
+        unlockExpiresAt?: number;
+        unlockServerNow?: number;
+      };
+      const expiresAt = readUnlockExpiresAt(body);
+      if (expiresAt) applyGrant(expiresAt, body.unlockServerNow);
       if (response.status === 403 && body.code === "REAUTH_REQUIRED") {
         setPendingRevealId(id);
+        return;
+      }
+      if (body.code === "PHRASE_SETUP_REQUIRED") {
+        setPhraseStage({ id, stage: "setup" });
+        return;
+      }
+      if (body.code === "UNLOCK_REQUIRED" || body.code === "PHRASE_MISMATCH" || body.code === "PHRASE_THROTTLED") {
+        setPhraseError(body.code === "UNLOCK_REQUIRED" ? "" : (body.error ?? VAULT_PHRASE_MISMATCH));
+        setPhraseStage({ id, stage: "unlock" });
         return;
       }
       if (!response.ok || !body.secret) {
         setMessage(body.error ?? "This setup key could not be revealed.");
         return;
       }
+      setPhraseStage(null);
+      setPhraseError("");
       const entry = rows.find((row) => row.id === id) ?? null;
       setRevealing(entry);
       setRevealedSeed(body.secret);
@@ -225,14 +267,15 @@ export function AuthenticatorClient({ entries }: { entries: AuthenticatorEntry[]
     const form = new FormData(event.currentTarget);
     const issuer = String(form.get("issuer")).trim();
     const account = String(form.get("account")).trim();
+    const notes = String(form.get("notes") ?? "").trim();
     setMessage("");
     try {
-      const result = await renameAuthenticatorAction(renaming.id, issuer, account);
+      const result = await renameAuthenticatorAction(renaming.id, issuer, account, notes);
       if (!result.ok) {
         setMessage(result.error);
         return;
       }
-      setPatches((current) => ({ ...current, [renaming.id]: { issuer, account_name: account, updated_at: new Date().toISOString() } }));
+      setPatches((current) => ({ ...current, [renaming.id]: { issuer, account_name: account, notes: notes || null, updated_at: new Date().toISOString() } }));
       setRenaming(null);
       router.refresh();
     } catch {
@@ -282,6 +325,7 @@ export function AuthenticatorClient({ entries }: { entries: AuthenticatorEntry[]
             {isPinned(entry) ? <Pin aria-hidden className="authenticator-pin-mark" /> : null}
           </b>
           {subtitle ? <small>{subtitle}</small> : null}
+          {entry.notes ? <small className="authenticator-notes">{entry.notes}</small> : null}
         </div>
         <button
           type="button"
@@ -466,6 +510,7 @@ export function AuthenticatorClient({ entries }: { entries: AuthenticatorEntry[]
           <form id="authenticator-rename-form" onSubmit={(event) => void onRename(event)}>
             <label>Service<input name="issuer" required defaultValue={renaming.issuer} autoComplete="off" /></label>
             <label>Account<input name="account" required defaultValue={renaming.account_name} autoComplete="off" /></label>
+            <label>Notes<textarea name="notes" defaultValue={renaming.notes ?? ""} placeholder="Production admin" autoComplete="off" maxLength={400} /></label>
           </form>
         </AuthenticatorDialog>
       ) : null}
@@ -481,6 +526,7 @@ export function AuthenticatorClient({ entries }: { entries: AuthenticatorEntry[]
           <dl className="authenticator-details">
             <div><dt>Service</dt><dd>{details.issuer}</dd></div>
             <div><dt>Account</dt><dd>{details.account_name}</dd></div>
+            {details.notes ? <div><dt>Notes</dt><dd>{details.notes}</dd></div> : null}
             <div><dt>Type</dt><dd>6-digit TOTP · 30 seconds</dd></div>
             <div><dt>Added</dt><dd>{new Date(details.created_at).toLocaleString()}</dd></div>
           </dl>
@@ -526,6 +572,28 @@ export function AuthenticatorClient({ entries }: { entries: AuthenticatorEntry[]
             const id = pendingRevealId;
             setPendingRevealId(null);
             if (id) void revealSeed(id);
+          }}
+        />
+      ) : null}
+      {phraseStage?.stage === "setup" ? (
+        <ProtectVaultDialog
+          onClose={() => setPhraseStage(null)}
+          onProtected={() => {
+            const id = phraseStage.id;
+            setPhraseStage(null);
+            void revealSeed(id);
+          }}
+        />
+      ) : null}
+      {phraseStage?.stage === "unlock" ? (
+        <UnlockVaultDialog
+          busy={unlockBusy}
+          error={phraseError}
+          onClose={() => { setPhraseStage(null); setPhraseError(""); }}
+          onUnlock={(phrase) => {
+            const id = phraseStage.id;
+            setUnlockBusy(true);
+            void revealSeed(id, phrase).finally(() => setUnlockBusy(false));
           }}
         />
       ) : null}

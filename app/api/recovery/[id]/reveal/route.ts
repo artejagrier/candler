@@ -5,6 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { decryptSecret, encryptSecret, type EncryptedValue } from "@/lib/security/encryption";
 import { emitAuditEvent } from "@/lib/audit/events";
 import { safeErrorResponse } from "@/lib/security/redaction";
+import {
+  authorizeVaultSecretAccess,
+  parseJsonObject,
+  readSubmittedPhrase,
+  readVaultUnlockStatus,
+  vaultPhraseGateResponse,
+  withVaultUnlockStatus,
+} from "@/lib/vault/recovery-phrase-store";
 
 async function load(id: string, userId: string, workspaceId: string) {
   const supabase = await createClient();
@@ -22,10 +30,23 @@ function reauth() {
   return Response.json({ error: "Confirm your password or complete MFA before revealing recovery codes.", code: "REAUTH_REQUIRED" }, { status: 403 });
 }
 
-export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
+async function gate(request: Request, userId: string, workspaceId: string) {
+  const body = await parseJsonObject(request);
+  const result = await authorizeVaultSecretAccess({
+    userId,
+    workspaceId,
+    phrase: readSubmittedPhrase(body),
+    intent: "recovery",
+  });
+  return { body, result };
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const context = await getWorkspaceContext();
   if (!context) return safeErrorResponse("Authentication required.", 401);
   if (!(await hasRecentAuthentication())) return reauth();
+  const unlocked = await gate(request, context.userId, context.workspaceId);
+  if (!unlocked.result.ok) return vaultPhraseGateResponse(unlocked.result);
   const { id } = await params;
   const { data } = await load(id, context.userId, context.workspaceId);
   if (!data) return safeErrorResponse("Recovery set not found.", 404);
@@ -45,7 +66,18 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       targetId: id,
       metadata: { service: data.service, remaining: data.remaining_count },
     });
-    return Response.json({ codes, hideAfterSeconds: 15 }, { headers: { "Cache-Control": "no-store" } });
+    await emitAuditEvent({
+      workspaceId: context.workspaceId,
+      actorId: context.userId,
+      eventType: "vault_secret_reveal_authorized",
+      targetType: "recovery_set",
+      targetId: id,
+      metadata: { service: data.service },
+    });
+    return Response.json(
+      withVaultUnlockStatus(await readVaultUnlockStatus(context.userId), { codes, hideAfterSeconds: 15 }),
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch {
     return safeErrorResponse("Recovery codes could not be decrypted.", 500);
   }
@@ -55,8 +87,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const context = await getWorkspaceContext();
   if (!context) return safeErrorResponse("Authentication required.", 401);
   if (!(await hasRecentAuthentication())) return reauth();
+  const unlocked = await gate(request, context.userId, context.workspaceId);
+  if (!unlocked.result.ok) return vaultPhraseGateResponse(unlocked.result);
   const { id } = await params;
-  const index = z.object({ index: z.number().int().nonnegative() }).parse(await request.json()).index;
+  const index = z.object({ index: z.number().int().nonnegative() }).parse({
+    index: unlocked.body.index,
+  }).index;
   const { data, supabase } = await load(id, context.userId, context.workspaceId);
   if (!data) return safeErrorResponse("Recovery set not found.", 404);
   try {

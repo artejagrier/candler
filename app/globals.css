@@ -397,7 +397,28 @@
 .vault-dialog-head{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:1rem}
 .vault-dialog-head h2{margin-bottom:.35rem}
 .vault-dialog-head p,.vault-dialog-body p{color:var(--color-fog);font-size:.8rem;line-height:1.55}
-.vault-dialog-footer{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1.25rem;flex-wrap:wrap}
+.vault-phrase-field{display:flex;flex-direction:column;gap:.35rem;margin-bottom:.85rem}
+.vault-phrase-field input{width:100%}
+.vault-phrase-count{font-size:.68rem;color:var(--color-slate-muted);letter-spacing:.01em;margin-top:.15rem}
+.vault-phrase-error{font-size:.72rem;color:var(--color-danger, #f87171)}
+.vault-phrase-safety{color:var(--color-foreground)!important;font-size:.86rem!important;font-weight:560;line-height:1.5}
+.vault-unlock-bar{margin:0 0 1.15rem;padding:0 0 .8rem;border-bottom:1px solid var(--color-line)}
+.vault-unlock-row{display:flex;align-items:center;gap:.55rem;min-height:1.35rem}
+.vault-unlock-row svg{width:.9rem;height:.9rem;flex-shrink:0;color:var(--color-fog)}
+.vault-unlock-bar[data-state="unlocked"] .vault-unlock-row svg{color:var(--color-foreground)}
+.vault-unlock-status{margin:0;color:var(--color-fog);font-size:.78rem;font-weight:500;letter-spacing:.01em}
+.vault-unlock-bar[data-state="unlocked"] .vault-unlock-status{color:var(--color-foreground)}
+.vault-unlock-time{font-variant-numeric:tabular-nums;font-weight:620}
+.vault-unlock-lock{margin-left:auto;border:0;background:none;color:var(--color-fog);font:inherit;font-size:.72rem;font-weight:560;padding:.15rem .1rem;cursor:pointer}
+.vault-unlock-lock:hover,.vault-unlock-lock:focus-visible{color:var(--color-foreground)}
+.vault-unlock-rail{height:2px;margin-top:.5rem;background:color-mix(in srgb, var(--color-foreground) 10%, transparent);border-radius:9px;overflow:hidden}
+.vault-unlock-rail>i{display:block;height:100%;width:0;background:var(--candler-system-gradient);box-shadow:0 0 8px color-mix(in srgb,#FF3D9A 28%,transparent);transition:width .25s linear}
+.vault-unlock-bar[data-ending="true"] .vault-unlock-time{color:var(--color-foreground)}
+.vault-unlock-bar[data-ending="true"] .vault-unlock-rail{height:3px}
+.vault-unlock-bar[data-ending="true"] .vault-unlock-rail>i{box-shadow:0 0 12px color-mix(in srgb,#FF3D9A 46%,transparent)}
+.vault-unlock-rail--locked{height:2px}
+@media(prefers-reduced-motion:reduce){.vault-unlock-rail>i{transition:none}}
+.authenticator-notes{display:block;font-size:.68rem;color:var(--color-slate-muted);margin-top:.15rem}
 .vault-table .row-actions button{min-width:2.25rem;min-height:2.25rem;cursor:pointer}
 .vault-table .row-actions button:disabled{opacity:.45}
 .secret-masked{display:inline-flex;align-items:center;gap:.35rem}

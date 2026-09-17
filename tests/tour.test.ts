@@ -69,6 +69,27 @@ test("tour has exactly 9 content steps", () => {
   assert.equal(matches.length, 9, "Must have exactly 9 steps");
 });
 
+test("Vault tutorial explains Vault Phrase as the second lock", () => {
+  const vaultBlock = tour.slice(tour.indexOf('id: "vault"'), tour.indexOf('id: "authenticator"'));
+  assert.ok(vaultBlock.includes("Your Vault Phrase is the second lock"));
+  assert.ok(vaultBlock.includes("You only need one Vault Phrase"));
+  assert.ok(vaultBlock.includes("12 and 128"));
+  assert.ok(vaultBlock.includes("Write your Vault Phrase down"));
+  assert.ok(vaultBlock.includes("five minutes"));
+  assert.ok(vaultBlock.includes("remaining unlock time"));
+  assert.ok(vaultBlock.includes("lock your Vault immediately"));
+  assert.ok(vaultBlock.includes("Candler support will never ask you to send us your Vault Phrase"));
+  assert.ok(vaultBlock.includes("Candler will never display your Vault Phrase"));
+  assert.ok(vaultBlock.includes("What's Your Favorite Scary Movie Sydney?"));
+  assert.equal(vaultBlock.includes("Recovery Phrase"), false);
+});
+
+test("Vault tutorial keeps Recovery codes distinct from Vault Phrase", () => {
+  const recoveryBlock = tour.slice(tour.indexOf('id: "recovery"'), tour.indexOf('id: "cloud"'));
+  assert.ok(recoveryBlock.includes("recovery codes"));
+  assert.equal(recoveryBlock.includes("Vault Phrase"), false);
+});
+
 test("all expected step IDs are present", () => {
   const expected = ["appearance", "projects", "vault", "authenticator", "recovery", "cloud", "agent", "activity", "command-palette"];
   for (const id of expected) {
