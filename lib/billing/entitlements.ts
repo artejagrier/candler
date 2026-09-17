@@ -24,6 +24,8 @@ export interface SubscriptionRow {
   entitlement_pro?: boolean | null;
   paddle_customer_id?: string | null;
   storage_quota_bytes?: number | null;
+  scheduled_change_action?: string | null;
+  scheduled_change_effective_at?: string | Date | null;
 }
 
 const PLAN_RANK: Record<CloudPlan, number> = { free: 0, pro: 1, cloud500: 2, cloud1tb: 3 };

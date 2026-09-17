@@ -35,8 +35,10 @@ test("default appearance is dark with neon green accent", () => {
   assert.equal(resolved.appearance, "dark");
   assert.equal(resolved.accent, "neon-green");
   assert.equal(resolved.scheme, "dark");
-  assert.equal(resolved.tokens["--background"]?.toUpperCase(), "#0A0A0A");
-  assert.equal(resolved.tokens["--sidebar-bg"]?.toUpperCase(), "#111111");
+  assert.equal(resolved.tokens["--background"]?.toUpperCase(), "#000000");
+  assert.equal(resolved.tokens["--sidebar-bg"]?.toUpperCase(), "#000000");
+  assert.equal(resolved.tokens["--workspace-bg"]?.toUpperCase(), "#000000");
+  assert.equal(resolved.tokens["--topbar-bg"]?.toUpperCase(), "#000000");
   assert.equal(resolved.tokens["--accent"]?.toUpperCase(), "#B7FF2A");
   assert.equal(resolved.tokens["--accent-foreground"]?.toUpperCase(), "#0A0A0A");
 });

@@ -10,7 +10,15 @@ import { replayCandlerTour } from "@/components/workspace/CandlerTour";
 import { signOutAction } from "@/lib/auth/actions";
 import { useOutsideDismiss } from "@/hooks/useOutsideDismiss";
 
-export function AccountMenu({ userName, workspaceName }: { userName: string; workspaceName: string }) {
+export function AccountMenu({
+  userName,
+  workspaceName,
+  planLabel,
+}: {
+  userName: string;
+  workspaceName: string;
+  planLabel?: string;
+}) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -37,6 +45,7 @@ export function AccountMenu({ userName, workspaceName }: { userName: string; wor
           <div className="app-menu-header">
             <b>{userName}</b>
             <small>{workspaceName}</small>
+            {planLabel ? <span className="plan-chip plan-chip--menu">{planLabel}</span> : null}
           </div>
           {ACCOUNT_MENU.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} role="menuitem" onClick={() => setOpen(false)}>

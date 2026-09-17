@@ -10,8 +10,12 @@ import { getProjectSecretsMetadata } from "@/lib/agent/context";
 import { deriveHealthFindings, healthScore } from "@/lib/health/findings";
 import { createClient } from "@/lib/supabase/server";
 import { activityKind, activityLabel } from "@/lib/product/activity-copy";
+import { getStorageQuota } from "@/lib/cloud/server";
+import { PlanChip } from "@/components/product/PlanChip";
+import { formatUsedGb, planChipLabel, quotaLabel, isTrialingSubscription } from "@/lib/billing/plan-display";
 
 export const metadata: Metadata = { title: "Dashboard" };
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const data = isSupabaseConfigured ? await getWorkspaceData() : null;
@@ -53,6 +57,10 @@ export default async function DashboardPage() {
   const bytes = (data?.files ?? [])
     .filter((f) => f.status === "backed_up")
     .reduce((n, f) => n + Number(f.size_bytes), 0);
+  const quota = data
+    ? await getStorageQuota(data.context.workspaceId)
+    : { plan: "free" as const, bytes: 10 * 1024 ** 3 };
+  const planLabel = planChipLabel(quota.plan, isTrialingSubscription(data?.subscriptions ?? []));
 
   const score = healthScore(findings);
   const highCount = findings.filter((f) => f.severity === "high").length;
@@ -63,7 +71,8 @@ export default async function DashboardPage() {
       : state === "watching"
         ? "var(--color-purple-bright)"
         : "var(--color-warning)";
-  const gb = (bytes / 1024 ** 3).toFixed(2);
+  const gb = formatUsedGb(bytes);
+  const quotaText = quotaLabel(quota.bytes);
   const plural = (n: number) => (n === 1 ? "" : "s");
   const badgeLabel =
     state === "protected" ? "Protected" : state === "watching" ? "Watching" : "Action needed";
@@ -97,9 +106,12 @@ export default async function DashboardPage() {
             : "Connect Supabase to begin using Candler."
         }
         actions={
-          <Link className="primary-button" href="/app/agent">
-            Ask Candler <ArrowRight />
-          </Link>
+          <>
+            <PlanChip label={planLabel} />
+            <Link className="primary-button" href="/app/agent">
+              Ask Candler <ArrowRight />
+            </Link>
+          </>
         }
       />
       {!data?.projects.length ? (
@@ -150,8 +162,8 @@ export default async function DashboardPage() {
           <section className="dash-facts" aria-label="Workspace summary">
             <div>
               <small>Cloud storage</small>
-              <b>{gb} GB</b>
-              <small>verified backup</small>
+              <b>{gb} / {quotaText}</b>
+              <small>{planLabel} · verified backup</small>
             </div>
             <div>
               <small>Vault</small>

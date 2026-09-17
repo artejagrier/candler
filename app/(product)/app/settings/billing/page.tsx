@@ -5,8 +5,10 @@ import { getWorkspaceData } from "@/lib/data/queries";
 import { getCurrentStorageUsage, getStorageQuota } from "@/lib/cloud/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { hasProEntitlement } from "@/lib/billing/entitlements";
+import { PLAN_COPY, pickDisplaySubscription, subscriptionFacts } from "@/lib/billing/plan-display";
 
 export const metadata: Metadata = { title: "Billing" };
+export const dynamic = "force-dynamic";
 
 type Product = "candler_pro" | "cloud_500" | "cloud_1tb";
 const VALID_PLANS = new Set<string>(["candler_pro", "cloud_500", "cloud_1tb"]);
@@ -34,9 +36,15 @@ export default async function Billing({
     process.env.PADDLE_PRICE_CLOUD_1TB &&
     process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
   );
+  const copy = PLAN_COPY[quota.plan];
+  const display = pickDisplaySubscription(data?.subscriptions ?? []);
   return (
     <>
-      <PageHeader eyebrow="Settings" title="Billing" description="Free 10 GB · Pro $18/mo 50 GB · Cloud 500 $29/mo · Cloud 1 TB $39/mo. Storage quota is the limit — not project count." />
+      <PageHeader
+        eyebrow="Settings"
+        title="Billing"
+        description="Plans, Cloud storage, and subscription status. Storage quota is the limit — not project count."
+      />
       <BillingClient
         proActive={proActive}
         cloudPlan={quota.plan}
@@ -45,6 +53,9 @@ export default async function Billing({
         hasCustomer={hasCustomer}
         configured={configured}
         autoPlan={autoPlan}
+        planTitle={copy.title}
+        planQuota={copy.quota}
+        statusFacts={subscriptionFacts(display)}
       />
     </>
   );

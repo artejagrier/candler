@@ -109,6 +109,7 @@ export function ProductShell(props: {
   userName: string;
   workspaceName: string;
   projects?: { id: string; name: string }[];
+  planLabel?: string;
 }) {
   return (
     <Suspense fallback={<ProductChrome {...props} pathname="/app" projectId={undefined} projectName={undefined} queryProject={undefined} />}>
@@ -122,11 +123,13 @@ function ProductShellReady({
   userName,
   workspaceName,
   projects = [],
+  planLabel,
 }: {
   children: React.ReactNode;
   userName: string;
   workspaceName: string;
   projects?: { id: string; name: string }[];
+  planLabel?: string;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -160,6 +163,7 @@ function ProductShellReady({
       queryProject={queryProject}
       workspaceName={workspaceName}
       userName={userName}
+      planLabel={planLabel}
       paletteOpen={paletteOpen}
       drawerOpen={drawerOpen}
       onOpenPalette={() => setPaletteOpen(true)}
@@ -186,6 +190,7 @@ function ProductChrome({
   onClosePalette,
   onOpenDrawer,
   onCloseDrawer,
+  planLabel,
 }: {
   children: React.ReactNode;
   userName: string;
@@ -200,6 +205,7 @@ function ProductChrome({
   onClosePalette?: () => void;
   onOpenDrawer?: () => void;
   onCloseDrawer?: () => void;
+  planLabel?: string;
 }) {
   return (
     <div className="app-shell">
@@ -233,7 +239,7 @@ function ProductChrome({
               <span>Protected</span>
             </span>
             <NotificationsMenu />
-            <AccountMenu userName={userName} workspaceName={workspaceName} />
+            <AccountMenu userName={userName} workspaceName={workspaceName} planLabel={planLabel} />
           </div>
         </header>
 

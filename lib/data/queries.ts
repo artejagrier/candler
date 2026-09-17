@@ -13,7 +13,7 @@ export async function getWorkspaceData() {
     supabase.from("cloud_folders").select("id,name,parent_id,project_id,deleted_at,created_at,updated_at").eq("workspace_id",context.workspaceId).is("deleted_at",null).order("name"),
     supabase.from("agent_conversations").select("id,title,project_id,created_at,updated_at").eq("workspace_id", context.workspaceId).order("updated_at", { ascending: false }),
     supabase.from("audit_events").select("id,event_type,target_type,target_id,metadata,created_at").eq("workspace_id", context.workspaceId).order("created_at", { ascending: false }).limit(20),
-    supabase.from("subscriptions").select("product_key,status,current_period_end,storage_quota_bytes,entitlement_pro,cloud_plan,paddle_customer_id").eq("workspace_id", context.workspaceId).order("updated_at", { ascending: false }),
+    supabase.from("subscriptions").select("product_key,status,current_period_end,storage_quota_bytes,entitlement_pro,cloud_plan,paddle_customer_id,scheduled_change_action,scheduled_change_effective_at").eq("workspace_id", context.workspaceId).order("updated_at", { ascending: false }),
     supabase.from("authenticator_entries").select("id,issuer,account_name,pinned,last_used_at,created_at,updated_at").eq("workspace_id", context.workspaceId).eq("owner_id", context.userId).order("issuer"),
     supabase.from("recovery_code_sets").select("id,service,account_name,total_count,remaining_count,created_at,updated_at").eq("workspace_id", context.workspaceId).order("updated_at", { ascending: false }),
   ]);
