@@ -36,6 +36,12 @@ import {
   type TotpInput,
 } from "@/lib/auth/schemas";
 import {
+  CANDLER_TOTP_ISSUER,
+  buildCandlerOtpAuthUri,
+  candlerAccountLabel,
+  enrollmentQrSrc,
+} from "@/lib/auth/candler-totp";
+import {
   regenerateRecoveryCodes,
   verifyAndConsumeRecoveryCode,
 } from "@/lib/auth/recovery-codes";
@@ -352,27 +358,45 @@ export async function acceptInvitationAction(
 
 // ── MFA enrollment (Security settings) ───────────────────────────────────────
 export type EnrollResult =
-  | { ok: true; factorId: string; qrCode: string; secret: string; uri: string }
+  | { ok: true; factorId: string; qrCode: string; secret: string }
   | { ok: false; error: string };
 
-/** Begin TOTP enrollment: returns a QR code + secret to show the user. */
+/** Begin TOTP enrollment: returns a QR image + setup key for the current user. */
 export async function enrollMfaAction(): Promise<EnrollResult> {
   if (!isSupabaseConfigured) return { ok: false, error: NOT_CONFIGURED_MESSAGE };
 
   const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { ok: false, error: "Authentication required." };
+  const account = candlerAccountLabel(userData.user.email);
+
+  const { data: factors } = await supabase.auth.mfa.listFactors();
+  for (const factor of factors?.totp ?? []) {
+    if (factor.status !== "verified") {
+      await supabase.auth.mfa.unenroll({ factorId: factor.id });
+    }
+  }
+
   const { data, error } = await supabase.auth.mfa.enroll({
     factorType: "totp",
-    friendlyName: `Authenticator ${new Date().toISOString().slice(0, 10)}`,
+    issuer: CANDLER_TOTP_ISSUER,
+    friendlyName: account,
   });
-  if (error || !data) {
+  if (error || !data?.totp?.secret) {
     return { ok: false, error: error?.message ?? "Couldn't start enrollment." };
+  }
+
+  let qrCode = "";
+  try {
+    qrCode = enrollmentQrSrc(buildCandlerOtpAuthUri(data.totp.secret, account));
+  } catch {
+    qrCode = "";
   }
   return {
     ok: true,
     factorId: data.id,
-    qrCode: data.totp.qr_code,
+    qrCode,
     secret: data.totp.secret,
-    uri: data.totp.uri,
   };
 }
 

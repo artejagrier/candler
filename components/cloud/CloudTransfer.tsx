@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatBytes, type TransferItem, type TransferProfile } from "@/lib/cloud/transfer";
 import { skipReasonSummary, skippedFileCount, type SkipRecord } from "@/lib/cloud/smart-ignore";
 import { formatEta } from "@/lib/cloud/stats";
+import { summarizeBackup } from "@/lib/cloud/backup-state";
 
 export function CloudTransfer({
   title,
@@ -19,6 +20,7 @@ export function CloudTransfer({
   bytesTotal,
   etaSeconds,
   onCancel,
+  onRetry,
   profile,
 }: {
   title: string;
@@ -34,23 +36,28 @@ export function CloudTransfer({
   bytesTotal: number;
   etaSeconds: number | null;
   onCancel?: () => void;
+  onRetry?: () => void;
   profile?: TransferProfile | null;
 }) {
   const [openSkipped, setOpenSkipped] = useState(false);
   const skipCount = skippedFileCount(skipped);
   const reasons = skipReasonSummary(skipped);
+  const summary = summarizeBackup(items, phase === "cancelled");
   const total = items.length;
-  const done = items.filter((item) => item.status === "backed_up" || item.status === "skipped").length;
-  const failedItems = items.filter((item) => item.status === "failed");
-  const failed = failedItems.length;
-  const percent = total ? Math.round((done / total) * 100) : 0;
+  const finished = phase === "done" || phase === "cancelled";
   const eyebrow = phase === "preparing"
-    ? "Preparing project…"
+    ? "Scanning…"
     : phase === "cancelled"
       ? "Cancelled"
-      : phase === "done"
-        ? "Backup complete"
-        : "Backing up";
+      : !finished && summary.outcome === "verifying"
+        ? `Verifying ${summary.verified.toLocaleString()} / ${summary.eligible.toLocaleString()}`
+        : !finished
+          ? `Backing up ${summary.verified.toLocaleString()} / ${summary.eligible.toLocaleString()}`
+          : summary.outcome === "complete"
+            ? "Backup Complete"
+            : summary.outcome === "empty"
+              ? "Nothing to back up"
+              : "Backup Incomplete";
 
   return (
     <section className="cloud-transfer" aria-live="polite">
@@ -67,17 +74,17 @@ export function CloudTransfer({
       <p className="cloud-transfer-meta">
         {phase === "preparing"
           ? (scanned ? `Scanning ${scanned.toLocaleString()} files` : "Scanning project…")
-          : `${scanned.toLocaleString()} files found`}
-        {skipCount ? ` · ${skipCount.toLocaleString()} generated files skipped` : ""}
-        {unchanged ? ` · ${unchanged.toLocaleString()} unchanged` : ""}
-        {total ? ` · ${total.toLocaleString()} files to transfer` : ""}
+          : `${scanned.toLocaleString()} files discovered`}
+        {skipCount ? ` · ${skipCount.toLocaleString()} system files excluded` : ""}
+        {unchanged ? ` · ${unchanged.toLocaleString()} already verified` : ""}
+        {total ? ` · ${total.toLocaleString()} eligible` : ""}
       </p>
 
       {reasons.length ? (
         <p className="cloud-transfer-skips">
-          Skipped: {reasons.map((r) => r.label).join(" · ")}
+          Excluded: {reasons.map((r) => r.label).join(" · ")}
           <button type="button" className="quiet-link" onClick={() => setOpenSkipped((v) => !v)}>
-            {openSkipped ? "Hide skipped files" : "View skipped files"}
+            {openSkipped ? "Hide excluded files" : "View excluded files"}
           </button>
         </p>
       ) : null}
@@ -95,30 +102,53 @@ export function CloudTransfer({
 
       {phase !== "preparing" && total ? (
         <>
-          <div className="cloud-transfer-rail" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} aria-label="Backup progress">
-            <i style={{ width: `${percent}%` }} />
+          <div
+            className="cloud-transfer-rail candler-system-rail"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={summary.verified}
+            aria-label="Backup progress"
+          >
+            <i style={{ width: `${summary.percent}%` }} />
           </div>
           <p className="cloud-transfer-counts">
-            {done.toLocaleString()} / {total.toLocaleString()} files
+            {finished && summary.complete
+              ? `✓ ${summary.verified.toLocaleString()} files verified`
+              : `${summary.verified.toLocaleString()} / ${summary.eligible.toLocaleString()} verified`}
             {bytesTotal > 0 ? ` · ${formatBytes(bytesDone)} / ${formatBytes(bytesTotal)}` : ""}
-            {failed ? ` · ${failed} failed` : ""}
+            {summary.failed ? ` · ${summary.failed} ${summary.failed === 1 ? "file needs attention" : "files need attention"}` : ""}
+            {skipCount ? ` · ${skipCount.toLocaleString()} system files excluded` : ""}
           </p>
-          {failedItems.length ? (
+          {finished && summary.complete ? (
+            <p className="cloud-transfer-complete">Backup Complete</p>
+          ) : null}
+          {finished && !summary.complete && summary.failed ? (
+            <p className="cloud-transfer-incomplete" role="status">
+              Backup Incomplete · {summary.verified.toLocaleString()} / {summary.eligible.toLocaleString()} verified
+            </p>
+          ) : null}
+          {summary.failed ? (
             <ul className="cloud-transfer-fail-list">
-              {failedItems.slice(0, 20).map((item) => (
+              {items.filter((item) => item.status === "failed").slice(0, 20).map((item) => (
                 <li key={item.id}>{item.error ?? `${item.relativePath} — failed`}</li>
               ))}
-              {failedItems.length > 20 ? <li>and {failedItems.length - 20} more…</li> : null}
+              {summary.failed > 20 ? <li>and {summary.failed - 20} more…</li> : null}
             </ul>
+          ) : null}
+          {finished && summary.failed > 0 && onRetry ? (
+            <button type="button" className="primary-button" onClick={onRetry}>
+              Retry failed {summary.failed === 1 ? "file" : "files"}
+            </button>
           ) : null}
         </>
       ) : null}
 
       {phase === "uploading" && (uploadingCount || verifyingCount) ? (
         <p className="cloud-transfer-current">
-          Current activity: {uploadingCount ? `Uploading ${uploadingCount} file${uploadingCount === 1 ? "" : "s"}` : ""}
-          {uploadingCount && verifyingCount ? " · " : ""}
-          {verifyingCount ? `Verifying ${verifyingCount} file${verifyingCount === 1 ? "" : "s"}` : ""}
+          {verifyingCount
+            ? `Verifying ${summary.verified.toLocaleString()} / ${summary.eligible.toLocaleString()}`
+            : `Uploading ${Math.min(summary.verified + uploadingCount, summary.eligible).toLocaleString()} / ${summary.eligible.toLocaleString()}`}
           {current.length ? ` · ${current.join(" · ")}` : ""}
         </p>
       ) : null}
@@ -127,12 +157,13 @@ export function CloudTransfer({
         <p className="cloud-transfer-meta">{formatEta(etaSeconds)}</p>
       ) : null}
 
-      {profile && (phase === "done" || phase === "cancelled") ? (
+      {profile && finished ? (
         <pre className="cloud-transfer-profile" tabIndex={0}>
 {`files found ${profile.filesFound}
-generated skipped ${profile.skippedGenerated}
+system excluded ${profile.skippedGenerated}
 unchanged skipped ${profile.skippedUnchanged}
 uploaded ${profile.uploaded}
+verified ${summary.verified}
 failed ${profile.failed}
 bytes ${profile.bytes}
 scan ${profile.scanMs}ms
@@ -143,9 +174,10 @@ put ${profile.putRequests} req · avg/p50/p95 ${profile.putAvgMs}/${profile.putP
 verify ${profile.finalizeRequests} req · avg/p50/p95 ${profile.finalizeAvgMs}/${profile.finalizeP50Ms}/${profile.finalizeP95Ms}ms
 429 ${profile.count429} · retries ${profile.retries}
 put concurrency ${profile.putConcurrency}
-total ${profile.totalMs}ms${profile.failures?.length ? `
+total ${profile.totalMs}ms
+local delete safety ${summary.localDeleteSafety}${profile.failures?.length ? `
 
-PUT failed:
+Failed:
 ${profile.failures.slice(0, 20).join("\n")}` : ""}`}
         </pre>
       ) : null}

@@ -52,3 +52,10 @@ export const getAssuranceLevel = cache(async (): Promise<AalStatus> => {
     shouldStepUp: current === "aal1" && next === "aal2",
   };
 });
+
+export const hasVerifiedTotpFactor = cache(async (): Promise<boolean> => {
+  if (!isSupabaseConfigured) return false;
+  const supabase = await createClient();
+  const { data } = await supabase.auth.mfa.listFactors();
+  return Boolean(data?.totp?.some((factor) => factor.status === "verified"));
+});

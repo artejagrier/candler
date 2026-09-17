@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { CandlerProgress } from "@/components/ui/CandlerProgress";
 
@@ -37,6 +38,7 @@ export function BillingClient({
   planQuota: string;
   statusFacts: string[];
 }) {
+  const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -69,7 +71,7 @@ export function BillingClient({
       }
       if (body.upgraded) {
         setSuccess(true);
-        setTimeout(() => window.location.reload(), 1500);
+        setTimeout(() => router.refresh(), 1500);
         return;
       }
       if (body.transactionId && window.Paddle) {

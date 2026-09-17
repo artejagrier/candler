@@ -2,10 +2,20 @@ import "server-only";
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { R2_SIGNED_PUT_REQUEST_HEADERS } from "@/lib/cloud/r2-cors";
+import { CloudStorageUnavailableError } from "@/lib/cloud/errors";
 
 type StorageConfig = { bucket: string; client: S3Client };
 
 let cachedStorage: StorageConfig | null = null;
+
+export function isObjectStorageConfigured() {
+  return Boolean(
+    process.env.R2_ENDPOINT
+    && process.env.R2_ACCESS_KEY_ID
+    && process.env.R2_SECRET_ACCESS_KEY
+    && process.env.R2_BUCKET,
+  );
+}
 
 function storageConfig(): StorageConfig {
   if (cachedStorage) return cachedStorage;
@@ -14,7 +24,7 @@ function storageConfig(): StorageConfig {
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const bucket = process.env.R2_BUCKET;
   if (!endpoint || !accessKeyId || !secretAccessKey || !bucket) {
-    throw new Error("Object storage is not configured.");
+    throw new CloudStorageUnavailableError();
   }
   cachedStorage = {
     bucket,

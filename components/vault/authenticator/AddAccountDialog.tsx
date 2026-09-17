@@ -14,6 +14,17 @@ import { AuthenticatorDialog } from "@/components/vault/authenticator/Authentica
 
 type Step = "choose" | "scan" | "key" | "confirm";
 
+async function openCamera() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    });
+  } catch {
+    return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  }
+}
+
 async function decodeQrPayload(source: ImageData | HTMLVideoElement | HTMLCanvasElement | ImageBitmap) {
   const Detector = (window as Window & { BarcodeDetector?: new (options: { formats: string[] }) => {
     detect: (input: CanvasImageSource) => Promise<Array<{ rawValue?: string }>>;
@@ -131,10 +142,7 @@ export function AddAccountDialog({
     async function start() {
       setError("");
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
+        const stream = await openCamera();
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
           return;
@@ -144,6 +152,17 @@ export function AddAccountDialog({
         if (!video) return;
         video.srcObject = stream;
         await video.play();
+        if (!video.videoWidth) {
+          stream.getTracks().forEach((track) => track.stop());
+          const fallback = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          if (cancelled) {
+            fallback.getTracks().forEach((track) => track.stop());
+            return;
+          }
+          streamRef.current = fallback;
+          video.srcObject = fallback;
+          await video.play();
+        }
         const tick = async () => {
           if (cancelled || lockRef.current) return;
           if (video.readyState >= 2) {
@@ -364,6 +383,7 @@ export function AddAccountDialog({
           <div className="authenticator-viewfinder">
             <video ref={videoRef} autoPlay playsInline muted />
             <span />
+            {error ? <p className="authenticator-viewfinder-empty">{error}</p> : null}
           </div>
           <div className="authenticator-scan-actions">
             <button type="button" className="secondary-button" onClick={() => fileRef.current?.click()}>

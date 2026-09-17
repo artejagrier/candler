@@ -6,6 +6,7 @@ import { formatQuotaAmount, formatUsageSummary, formatUsedGb, formatBytes } from
 import {
   buildCloudLibrary,
   folderCountLabel,
+  folderLocalDeleteSafety,
   folderStatus,
   rootListingNames,
   type LibraryFile,
@@ -75,14 +76,16 @@ test("nested folder size includes all descendant backed-up files", () => {
   assert.equal(root?.folderCount, 3);
   assert.equal(folderCountLabel(root!), "5 files · 3 folders");
   assert.equal(folderStatus(root!).label, "Backed up");
+  assert.equal(folderLocalDeleteSafety(root!), "allowed");
 });
 
 test("folder status stays partial when a child failed", () => {
   const mixed = files.map((item) => item.id === "nav" ? { ...item, status: "failed" } : item);
   const index = buildCloudLibrary(folders, mixed);
   const status = folderStatus(index.summaries.get("root")!);
-  assert.equal(status.label, "Partial");
+  assert.equal(status.label, "Incomplete");
   assert.equal(status.cls, "warning");
+  assert.equal(folderLocalDeleteSafety(index.summaries.get("root")!), "blocked");
 });
 
 test("uploading summary uses a concise processing status", () => {

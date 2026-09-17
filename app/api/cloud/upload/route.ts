@@ -1,10 +1,12 @@
+import { z } from "zod";
 import { requireProjectAccess } from "@/lib/data/workspace";
 import { safeErrorResponse } from "@/lib/security/redaction";
 import { requireCloudActor } from "@/lib/cloud/operations";
 import { authorizeUploadBatch } from "@/lib/cloud/authorize";
 import { checksumSha256Schema } from "@/lib/cloud/batch-schema";
 import { MAX_UPLOAD_AUTHORIZATIONS_PER_MINUTE } from "@/lib/cloud/limits";
-import { z } from "zod";
+import { publicCloudError } from "@/lib/cloud/errors";
+import { sanitizeArchivePath } from "@/lib/cloud/restore-paths";
 
 const input = z.object({
   projectId: z.uuid().nullable().optional(),
@@ -25,6 +27,8 @@ export async function POST(request: Request) {
     const { context, admin } = await requireCloudActor();
     const body = input.parse(await request.json());
     if (body.projectId) await requireProjectAccess(body.projectId);
+    const relativePath = sanitizeArchivePath(body.relativePath?.trim() || body.filename);
+    if (!relativePath) throw new Error("Invalid file path.");
     const { results, quota } = await authorizeUploadBatch({
       context,
       admin,
@@ -32,7 +36,7 @@ export async function POST(request: Request) {
       folderId: body.folderId ?? null,
       files: [{
         filename: body.filename,
-        relativePath: (body.relativePath?.trim() || body.filename),
+        relativePath,
         contentType: body.contentType,
         size: body.size,
         checksumSha256: body.checksumSha256,
@@ -63,6 +67,7 @@ export async function POST(request: Request) {
         headers: { "Content-Type": "application/json", "Retry-After": "5" },
       });
     }
-    return safeErrorResponse(error instanceof Error ? error.message : undefined);
+    const mapped = publicCloudError(error);
+    return safeErrorResponse(mapped.message, mapped.status);
   }
 }

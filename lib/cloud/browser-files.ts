@@ -4,7 +4,7 @@
  * authorize → PUT → finalize pipeline.
  */
 
-import { isSmartIgnored, smartIgnoreReason, type SkipRecord } from "@/lib/cloud/smart-ignore";
+import { smartIgnoreReason, type SkipRecord } from "@/lib/cloud/smart-ignore";
 
 export type UploadSource = {
   file: File;
@@ -80,8 +80,8 @@ async function collectEntry(
   smartIgnore: boolean,
 ): Promise<void> {
   const rel = entryPath(parentPath, entry.name);
-  if (smartIgnore && isSmartIgnored(rel)) {
-    const reason = smartIgnoreReason(rel) ?? entry.name;
+  const reason = smartIgnoreReason(rel, { includeGenerated: !smartIgnore });
+  if (reason) {
     if (entry.isDirectory) {
       const count = await countNestedFiles(entry as FileSystemDirectoryEntry);
       skipped.push({ relativePath: rel, reason, count: Math.max(count, 1) });

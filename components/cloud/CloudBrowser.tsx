@@ -8,7 +8,6 @@ import {
   Folder,
   FolderInput,
   FolderPlus,
-  Upload,
 } from "lucide-react";
 import {
   bindDirectoryPicker,
@@ -102,7 +101,7 @@ async function sha256(file: globalThis.File, label: string, signal?: AbortSignal
   }
   if (signal?.aborted) throw new TransferCancelled();
   const hash = await crypto.subtle.digest("SHA-256", bytes);
-  return { checksumSha256: btoa(String.fromCharCode(...new Uint8Array(hash))), bytes };
+  return btoa(String.fromCharCode(...new Uint8Array(hash)));
 }
 
 function basename(path: string) {
@@ -123,13 +122,14 @@ export function CloudBrowser({
   filterProjectId?: string;
 }) {
   const router = useRouter();
-  const input = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const cancelledRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const restoreAbortRef = useRef<AbortController | null>(null);
   const restoringRef = useRef(false);
   const mountedRef = useRef(true);
+  const keepRef = useRef<UploadSource[]>([]);
+  const transferRef = useRef<TransferState | null>(null);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [includeGenerated, setIncludeGenerated] = useState(false);
@@ -142,6 +142,7 @@ export function CloudBrowser({
   const [moveParentId, setMoveParentId] = useState<string | null>(null);
   const [details, setDetails] = useState<CloudDetailsTarget | null>(null);
   const [restore, setRestore] = useState<RestoreState | null>(null);
+  transferRef.current = transfer;
   const visibleFiles = filterProjectId ? files.filter((f) => f.project_id === filterProjectId) : files;
   const visibleFolders = filterProjectId ? folders.filter((f) => f.project_id === filterProjectId) : folders;
   const uploadProjectId = filterProjectId ?? projects[0]?.id ?? null;
@@ -188,24 +189,63 @@ export function CloudBrowser({
     setTransfer((current) => current ? { ...current, phase: "cancelled" } : current);
   }
 
-  async function uploadSources(selected: UploadSource[], extras?: { errors?: string[]; skipped?: SkipRecord[]; scanned?: number; scanMs?: number }) {
+  function retryFailed() {
+    const current = transferRef.current;
+    if (!current || busy) return;
+    const failed = new Set(current.items.filter((item) => item.status === "failed").map((item) => item.relativePath));
+    const sources = keepRef.current.filter((source) => failed.has(source.relativePath));
+    if (!sources.length) return;
+    void uploadSources(sources, {
+      skipped: current.skipped,
+      scanned: current.scanned,
+      resume: true,
+    });
+  }
+
+  async function uploadSources(selected: UploadSource[], extras?: { errors?: string[]; skipped?: SkipRecord[]; scanned?: number; scanMs?: number; resume?: boolean }) {
     if (!workspaceId) return;
-    const smart = !includeGenerated;
-    const skipped: SkipRecord[] = [...(extras?.skipped ?? [])];
-    const keep: UploadSource[] = [];
-    for (const source of selected) {
-      const reason = smart ? smartIgnoreReason(source.relativePath) : null;
-      if (reason) skipped.push({ relativePath: source.relativePath, reason });
-      else keep.push(source);
+    if (!extras?.resume) {
+      setTransfer({
+        title: rootLabel(selected.map((source) => source.relativePath)),
+        phase: "preparing",
+        scanned: extras?.scanned ?? selected.length,
+        skipped: extras?.skipped ?? [],
+        unchanged: 0,
+        items: [],
+        etaSeconds: null,
+        profile: null,
+      });
+    }
+    const skipped: SkipRecord[] = extras?.resume
+      ? [...(extras.skipped ?? transferRef.current?.skipped ?? [])]
+      : [...(extras?.skipped ?? [])];
+    let keep: UploadSource[] = [];
+    if (extras?.resume) {
+      keep = selected;
+    } else {
+      for (const source of selected) {
+        const reason = smartIgnoreReason(source.relativePath, { includeGenerated });
+        if (reason) skipped.push({ relativePath: source.relativePath, reason });
+        else keep.push(source);
+      }
+      keepRef.current = keep;
     }
     const scanned = extras?.scanned ?? selected.length + skippedFileCount(extras?.skipped ?? []);
-    const title = rootLabel([...keep, ...selected].map((s) => s.relativePath));
-    const items: TransferItem[] = keep.map((source, index) => ({
-      id: `${index}-${source.relativePath}`,
-      relativePath: source.relativePath,
-      size: source.file.size,
-      status: "queued",
-    }));
+    const title = extras?.resume
+      ? (transferRef.current?.title ?? rootLabel(keep.map((s) => s.relativePath)))
+      : rootLabel([...keep, ...selected].map((s) => s.relativePath));
+    const items: TransferItem[] = extras?.resume
+      ? (transferRef.current?.items ?? []).map((item) => (
+        item.status === "failed" || item.status === "queued" || item.status === "authorizing" || item.status === "uploading" || item.status === "verifying"
+          ? { ...item, status: "queued", error: undefined }
+          : item
+      ))
+      : keep.map((source, index) => ({
+        id: `${index}-${source.relativePath}`,
+        relativePath: source.relativePath,
+        size: source.file.size,
+        status: "queued",
+      }));
     cancelledRef.current = false;
     abortRef.current = new AbortController();
     const signal = abortRef.current.signal;
@@ -216,14 +256,14 @@ export function CloudBrowser({
       phase: keep.length ? "uploading" : "done",
       scanned,
       skipped,
-      unchanged: 0,
+      unchanged: extras?.resume ? (transferRef.current?.unchanged ?? 0) : 0,
       items,
       etaSeconds: null,
       profile: null,
     });
     if (!keep.length) {
       setBusy(false);
-      setStatus(extras?.errors?.[0] ?? (skipped.length ? "Smart Backup skipped generated files. Nothing left to upload." : "Nothing to upload."));
+      setStatus(extras?.errors?.[0] ?? (skipped.length ? "Nothing left to back up after system exclusions." : "Nothing to upload."));
       return;
     }
 
@@ -250,7 +290,6 @@ export function CloudBrowser({
       item: TransferItem;
       source: UploadSource;
       checksumSha256: string;
-      bytes: ArrayBuffer;
       fileId?: string;
       uploadUrl?: string;
     };
@@ -272,11 +311,13 @@ export function CloudBrowser({
               patchItem(item.id, { status: "failed", error: `“${source.relativePath}” is empty (0 bytes) and was not uploaded.` });
               return;
             }
+            if (item.status === "backed_up" || item.status === "skipped") return;
             patchItem(item.id, { status: "authorizing" });
             const t0 = performance.now();
-            const hashedFile = await sha256(source.file, source.relativePath, signal);
+            const checksumSha256 = await sha256(source.file, source.relativePath, signal);
             hashMs.push(performance.now() - t0);
-            hashed.push({ item, source, checksumSha256: hashedFile.checksumSha256, bytes: hashedFile.bytes });
+            hashed.push({ item, source, checksumSha256 });
+            patchItem(item.id, { checksumSha256 });
           }, () => cancelledRef.current);
           if (cancelledRef.current || !hashed.length) return [] as AuthWork[];
           const t1 = performance.now();
@@ -351,6 +392,7 @@ export function CloudBrowser({
                 continue;
               }
               outgoing.push({ ...entry, fileId: row.fileId, uploadUrl: row.uploadUrl });
+              patchItem(entry.item.id, { fileId: row.fileId });
             }
             setTransfer((current) => current ? { ...current, unchanged: counters.skippedUnchanged } : current);
             return outgoing;
@@ -385,7 +427,7 @@ export function CloudBrowser({
                   "Content-Type": entry.source.file.type || "application/octet-stream",
                   "x-amz-checksum-sha256": entry.checksumSha256,
                 },
-                body: entry.bytes,
+                body: entry.source.file,
                 signal,
               }, retryOpts);
               const elapsed = performance.now() - t0;
@@ -409,7 +451,7 @@ export function CloudBrowser({
                 });
                 return;
               }
-              putBytes += entry.bytes.byteLength;
+              putBytes += entry.source.file.size;
               putElapsed += elapsed;
               if (putBytes > 0 && putElapsed > 0 && performance.now() - transferStarted > 4000 && uploadMs.length >= 3) {
                 const rate = putBytes / (putElapsed / 1000);
@@ -744,6 +786,7 @@ export function CloudBrowser({
           bytesTotal={bytesTotal}
           etaSeconds={transfer.etaSeconds}
           onCancel={transfer.phase === "uploading" ? cancelUpload : undefined}
+          onRetry={transfer.phase === "done" || transfer.phase === "cancelled" ? retryFailed : undefined}
           profile={transfer.profile}
         />
       ) : null}
@@ -763,17 +806,6 @@ export function CloudBrowser({
             </button>
           </div>
           <div className="flex gap-2 cloud-toolbar-actions">
-            <input
-              ref={input}
-              type="file"
-              multiple
-              hidden
-              onChange={(event) => {
-                const sources = sourcesFromFileList(event.target.files);
-                event.target.value = "";
-                void uploadSources(sources);
-              }}
-            />
             <input
               ref={(node) => {
                 folderInput.current = node;
@@ -803,8 +835,7 @@ export function CloudBrowser({
               setDialogValue("");
               setDialog({ type: "create-folder" });
             }}><FolderPlus />New folder</button>
-            <button className="secondary-button" disabled={!workspaceId || busy} onClick={openFolderPicker}><FolderInput />Upload folder</button>
-            <button className="primary-button" disabled={!workspaceId || busy} onClick={() => input.current?.click()}><Upload />Upload</button>
+            <button className="primary-button" disabled={!workspaceId || busy} onClick={openFolderPicker}><FolderInput />Upload Folder</button>
           </div>
         </div>
         {status ? <p className="upload-status">{status}</p> : null}
@@ -868,8 +899,8 @@ export function CloudBrowser({
           <div className="empty-state">
             <span className="agent-symbol" style={{ borderColor: "var(--color-line-strong)" }}><CloudUpload /></span>
             <h2>Your cloud is empty.</h2>
-            <p>Drag a project, folder, or file here to back it up. Smart Backup skips node_modules, .next, and other generated directories.</p>
-            <button className="primary-button" disabled={!workspaceId || busy} onClick={() => input.current?.click()}><Upload />Upload your first file</button>
+            <p>Drag a project, folder, or file here to back it up. Smart Backup skips node_modules, .next, and other generated directories. OS junk such as .DS_Store is always excluded.</p>
+            <button className="primary-button" disabled={!workspaceId || busy} onClick={openFolderPicker}><FolderInput />Upload Folder</button>
           </div>
         ) : (
           <CloudLibrary

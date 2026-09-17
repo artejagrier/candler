@@ -3,7 +3,8 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { objectKey, canUpload } from "@/lib/cloud/quota";
-import { signedUploadUrl } from "@/lib/cloud/storage";
+import { signedUploadUrl, isObjectStorageConfigured } from "@/lib/cloud/storage";
+import { CloudQuotaError, CloudStorageUnavailableError } from "@/lib/cloud/errors";
 import { getCurrentStorageUsage, getStorageQuota, MAX_FILE_BYTES } from "@/lib/cloud/server";
 import { MAX_BATCH_AUTHORIZED_FILES_PER_MINUTE, MAX_UPLOAD_AUTHORIZATIONS_PER_MINUTE } from "@/lib/cloud/limits";
 import { ensureFolderPath, primeFolderPathCache, type FolderPathCache } from "@/lib/cloud/operations";
@@ -78,6 +79,10 @@ export async function authorizeUploadBatch(input: {
   ]);
   const quotaMs = performance.now() - quotaStarted;
 
+  if (!isObjectStorageConfigured()) {
+    throw new CloudStorageUnavailableError();
+  }
+
   const existingStarted = performance.now();
   const paths = [...new Set(files.map((file) => file.relativePath))];
   const { data: existingRows } = await admin
@@ -136,6 +141,8 @@ export async function authorizeUploadBatch(input: {
 
   let used = usage;
   let reserved = 0;
+  let incomingBytes = 0;
+  let incomingCount = 0;
   const expiresAt = new Date(Date.now() + 900_000).toISOString();
 
   for (const file of files) {
@@ -146,6 +153,23 @@ export async function authorizeUploadBatch(input: {
       && match.checksum_sha256 === file.checksumSha256
     ) {
       results.push({ relativePath: file.relativePath, skipped: true, fileId: match.id, reason: "unchanged" });
+      continue;
+    }
+    incomingBytes += file.size;
+    incomingCount += 1;
+  }
+
+  if (incomingCount > 0 && !canUpload(usage, incomingBytes, quota.plan)) {
+    throw new CloudQuotaError(incomingBytes, Math.max(0, quota.bytes - usage));
+  }
+
+  for (const file of files) {
+    const match = existingByPath.get(file.relativePath);
+    if (
+      match
+      && match.size_bytes === file.size
+      && match.checksum_sha256 === file.checksumSha256
+    ) {
       continue;
     }
     if (tooMany(recent, reserved + 1, cap)) {

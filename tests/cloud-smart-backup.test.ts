@@ -64,10 +64,12 @@ test("Smart Backup skips generated directories and keeps source", () => {
   assert.equal(labels.includes(".DS_Store"), true);
 });
 
-test("Smart Backup can be disabled to include generated files", () => {
+test("Smart Backup can be disabled to include generated files, but OS junk stays excluded", () => {
   const { keep, skipped } = classifyBackupPaths(tree, false);
-  assert.equal(skipped.length, 0);
   assert.equal(keep.includes("demo/node_modules/locate-path/index.js"), true);
+  assert.equal(keep.includes("demo/.DS_Store"), false);
+  assert.equal(keep.includes("demo/src/.DS_Store"), false);
+  assert.equal(skipped.every((item) => item.reason === ".ds_store"), true);
 });
 
 test("retry delay honors Retry-After seconds and exponential fallback", () => {
@@ -144,8 +146,11 @@ test("cloud browser keeps per-file authorize and finalize without page reloads",
   assert.equal(source.includes("location.reload"), false);
   assert.equal(source.includes("runPipelinedBatches"), true);
   assert.equal(source.includes("router.refresh()"), true);
-  assert.equal(source.includes("body: entry.bytes"), true);
-  assert.equal(source.includes("body: entry.source.file"), false);
+  assert.equal(source.includes("body: entry.source.file"), true);
+  assert.equal(source.includes("body: entry.bytes"), false);
+  assert.equal(source.includes("Upload Folder"), true);
+  assert.equal(source.includes("<Upload />Upload"), false);
+  assert.equal(source.includes("retryFailed"), true);
   assert.equal(source.includes("describeTransferFailure"), true);
 });
 

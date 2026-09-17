@@ -22,6 +22,8 @@ export type TransferItem = {
   status: TransferStatus;
   error?: string;
   reason?: string;
+  fileId?: string;
+  checksumSha256?: string;
 };
 
 export type TransferProfile = {
@@ -139,6 +141,9 @@ export function describeTransferFailure(input: {
     return `${name} — PUT HTTP ${input.status}${hint}`;
   }
   const raw = sanitizeErrorText(input.error);
+  if (/object storage is not configured|CLOUD_STORAGE_UNAVAILABLE|storage provider unavailable/i.test(String(input.error ?? raw))) {
+    return `${name} — Cloud backup couldn't start. Please try again.`;
+  }
   if (/could not be found at the time an operation was processed/i.test(String(input.error ?? raw))) {
     return `${name} — file handle expired after hashing`;
   }
@@ -225,9 +230,7 @@ export async function fetchWithRetry(
       if (error instanceof TransferCancelled || (error instanceof DOMException && error.name === "AbortError")) {
         throw new TransferCancelled();
       }
-      const message = error instanceof Error ? error.message : String(error ?? "");
-      const corsLike = error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(message);
-      if (corsLike || attempt >= retries) throw error;
+      if (attempt >= retries) throw error;
       options?.onRetry?.();
       await sleep(retryDelayMs(attempt, null), signal);
     }

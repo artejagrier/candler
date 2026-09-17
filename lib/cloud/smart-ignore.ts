@@ -16,7 +16,7 @@ export const SMART_IGNORE_DIRECTORIES = [
   ".git",
 ] as const;
 
-export const SMART_IGNORE_FILES = [".ds_store"] as const;
+export const SMART_IGNORE_FILES = [".ds_store", "thumbs.db", "desktop.ini"] as const;
 
 const IGNORE_LABELS: Record<string, string> = {
   node_modules: "node_modules",
@@ -30,6 +30,8 @@ const IGNORE_LABELS: Record<string, string> = {
   ".vercel": ".vercel",
   ".git": ".git cache",
   ".ds_store": ".DS_Store",
+  "thumbs.db": "Thumbs.db",
+  "desktop.ini": "desktop.ini",
 };
 
 function normalizeSegment(name: string) {
@@ -40,19 +42,27 @@ export function ignoreLabel(reason: string) {
   return IGNORE_LABELS[reason] ?? reason;
 }
 
+export function systemJunkReason(relativePath: string): string | null {
+  const leaf = relativePath.split("/").filter(Boolean).at(-1)?.toLowerCase() ?? "";
+  if ((SMART_IGNORE_FILES as readonly string[]).includes(leaf)) return leaf;
+  return null;
+}
+
 /** Returns the ignore reason for a relative path, or null if it should be backed up. */
-export function smartIgnoreReason(relativePath: string): string | null {
+export function smartIgnoreReason(relativePath: string, options?: { includeGenerated?: boolean }): string | null {
+  const junk = systemJunkReason(relativePath);
+  if (junk) return junk;
+  if (options?.includeGenerated) return null;
   const parts = relativePath.split("/").filter(Boolean);
   for (const part of parts) {
     const key = normalizeSegment(part);
-    if ((SMART_IGNORE_FILES as readonly string[]).includes(key)) return key;
     if ((SMART_IGNORE_DIRECTORIES as readonly string[]).includes(key)) return key;
   }
   return null;
 }
 
-export function isSmartIgnored(relativePath: string) {
-  return smartIgnoreReason(relativePath) !== null;
+export function isSmartIgnored(relativePath: string, options?: { includeGenerated?: boolean }) {
+  return smartIgnoreReason(relativePath, options) !== null;
 }
 
 export type SkipRecord = { relativePath: string; reason: string; count?: number };
@@ -65,11 +75,7 @@ export function classifyBackupPaths(relativePaths: string[], smart: boolean) {
   const keep: string[] = [];
   const skipped: SkipRecord[] = [];
   for (const relativePath of relativePaths) {
-    if (!smart) {
-      keep.push(relativePath);
-      continue;
-    }
-    const reason = smartIgnoreReason(relativePath);
+    const reason = smartIgnoreReason(relativePath, { includeGenerated: !smart });
     if (reason) skipped.push({ relativePath, reason });
     else keep.push(relativePath);
   }

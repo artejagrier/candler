@@ -168,11 +168,21 @@ export function folderStatus(summary: FolderSummary): { label: string; cls: stri
   if (summary.failed > 0 && summary.backedUp === 0 && summary.uploading === 0 && summary.verifying === 0) {
     return { label: "Needs attention", cls: "failed" };
   }
-  if (summary.failed > 0) return { label: "Partial", cls: "warning" };
+  if (summary.failed > 0) return { label: "Incomplete", cls: "warning" };
   if (summary.uploading > 0) return { label: "Uploading", cls: "progress" };
   if (summary.verifying > 0) return { label: "Verifying", cls: "progress" };
   if (summary.backedUp === summary.fileCount) return { label: "Backed up", cls: "verified" };
-  return { label: "Partial", cls: "warning" };
+  return { label: "Incomplete", cls: "warning" };
+}
+
+export function folderLocalDeleteSafety(summary: FolderSummary) {
+  return summary.fileCount > 0
+    && summary.backedUp === summary.fileCount
+    && summary.failed === 0
+    && summary.uploading === 0
+    && summary.verifying === 0
+    ? "allowed" as const
+    : "blocked" as const;
 }
 
 export function rootListingNames(index: LibraryIndex) {

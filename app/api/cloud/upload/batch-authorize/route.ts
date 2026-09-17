@@ -4,6 +4,7 @@ import { requireCloudActor } from "@/lib/cloud/operations";
 import { authorizeUploadBatch } from "@/lib/cloud/authorize";
 import { uploadBatchInput } from "@/lib/cloud/batch-schema";
 import { MAX_BATCH_AUTHORIZED_FILES_PER_MINUTE } from "@/lib/cloud/limits";
+import { publicCloudError } from "@/lib/cloud/errors";
 
 function rateLimited(error: unknown) {
   return Boolean(error && typeof error === "object" && "status" in error && (error as { status?: number }).status === 429);
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
         headers: { "Content-Type": "application/json", "Retry-After": "5" },
       });
     }
-    return safeErrorResponse(error instanceof Error ? error.message : undefined);
+    const mapped = publicCloudError(error);
+    return safeErrorResponse(mapped.message, mapped.status);
   }
 }

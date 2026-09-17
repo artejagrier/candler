@@ -29,7 +29,11 @@ test("batch authorize schema rejects spoofed identity, quota, and object keys", 
   }));
   assert.throws(() => uploadFileDescriptor.parse({
     ...valid.files[0],
-    objectKey: "attacker/key",
+    relativePath: "../../etc/passwd",
+  }));
+  assert.throws(() => uploadFileDescriptor.parse({
+    ...valid.files[0],
+    relativePath: "/etc/passwd",
   }));
   const tooMany = Array.from({ length: MAX_FILES_PER_AUTHORIZE_BATCH + 1 }, (_, i) => ({
     ...valid.files[0],
@@ -76,14 +80,17 @@ test("batch routes keep server-side isolation contracts", () => {
   assert.equal(storage.includes("unhoistableHeaders"), true);
   assert.equal(storage.includes("R2_SIGNED_PUT_REQUEST_HEADERS"), true);
   const cors = readFileSync(new URL("../lib/cloud/r2-cors.ts", import.meta.url), "utf8");
-  assert.equal(cors.includes("http://localhost:3002"), true);
+  assert.equal(cors.includes("https://candler.dev"), true);
+  assert.equal(cors.includes("https://www.candler.dev"), true);
   assert.equal(cors.includes('"PUT"'), true);
   assert.equal(cors.includes("content-type"), true);
   assert.equal(cors.includes("x-amz-checksum-sha256"), true);
   assert.equal(cors.includes("AllowedOrigins\": [\"*\"]") || cors.includes("\"*\""), false);
   const transferUi = readFileSync(new URL("../components/cloud/CloudTransfer.tsx", import.meta.url), "utf8");
   assert.equal(transferUi.includes("cloud-transfer-fail-list"), true);
-  assert.equal(transferUi.includes("PUT failed:"), true);
+  assert.equal(transferUi.includes("Backup Incomplete"), true);
+  assert.equal(transferUi.includes("Retry failed"), true);
+  assert.equal(transferUi.includes("summarizeBackup"), true);
 });
 
 test("adaptive put concurrency stays inside 4-8 and drops on 429", () => {
