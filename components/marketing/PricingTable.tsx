@@ -48,9 +48,6 @@ export function PricingTable({
                 <span className="text-sm text-fog">{tier.cadence}</span>
               ) : null}
             </div>
-            {tier.product ? (
-              <span className="mk-trial-badge">7-day free trial</span>
-            ) : null}
             <p className="mt-3 text-sm leading-relaxed text-fog">
               {tier.description}
             </p>
