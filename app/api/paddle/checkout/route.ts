@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
     const transaction = await paddle.transactions.create({
       items: [{ priceId, quantity: 1 }],
-      customerId: paddleCustomerId ?? null,
+      customerId: paddleCustomerId,
       customData: {
         workspace_id: context.workspaceId,
         owner_id: context.userId,
@@ -55,7 +55,8 @@ export async function POST(request: Request) {
     });
 
     return Response.json({ transactionId: transaction.id });
-  } catch {
+  } catch (err) {
+    console.error("[paddle/checkout]", err instanceof Error ? err.message : String(err));
     return safeErrorResponse("Checkout could not be started.", 503);
   }
 }
