@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { vaultSearchHaystack, vaultUserError } from "../lib/vault/client-copy";
 
 const vaultClient = readFileSync(new URL("../components/vault/VaultClient.tsx", import.meta.url), "utf8");
+const addSecret = readFileSync(new URL("../components/vault/AddSecretDialog.tsx", import.meta.url), "utf8");
 const vaultDialog = readFileSync(new URL("../components/vault/VaultDialog.tsx", import.meta.url), "utf8");
 const stepUp = readFileSync(new URL("../components/product/StepUpDialog.tsx", import.meta.url), "utf8");
 const actions = readFileSync(new URL("../lib/product/actions.ts", import.meta.url), "utf8");
@@ -43,7 +44,7 @@ test("Vault client first-click contracts", () => {
   assert.equal(vaultClient.includes("pendingAuth"), true);
   assert.equal(vaultClient.includes('pending.intent === "copy"'), true);
   assert.equal(vaultClient.includes("resumeAfterStepUp"), true);
-  assert.equal(vaultClient.includes("Saving…"), true);
+  assert.equal(addSecret.includes("Saving…"), true);
   assert.equal(vaultClient.includes("Updating…"), true);
   assert.equal(vaultClient.includes("Deleting…"), true);
   assert.equal(vaultClient.includes("Revealing…"), true);
@@ -75,7 +76,10 @@ test("create/update persist ciphertext via encryptSecret and never a plaintext c
   const update = actions.slice(actions.indexOf("export async function updateSecretAction"), actions.indexOf("export async function deleteSecretAction"));
   assert.equal(create.includes("encryptedColumns(input.value)"), true);
   assert.equal(create.includes("plaintext"), false);
-  assert.equal(create.includes("eventType:\"secret.created\""), true);
+  assert.equal(create.includes("secret.created"), true);
+  assert.equal(create.includes("authorizeVaultSecretAccess"), false);
+  assert.equal(create.includes("vaultSaveError"), true);
+  assert.equal(create.includes("parseCreateSecretInput"), true);
   assert.equal(update.includes('eventType:input.value?"secret.rotated":"secret.updated"'), true);
   assert.equal(update.includes("encryptedColumns(input.value)"), true);
   assert.equal(actions.includes("eventType:\"secret.deleted\""), true);

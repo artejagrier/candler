@@ -24,43 +24,88 @@ export async function finalizeUploadBatch(input: {
     .eq("owner_id", context.userId);
 
   const byId = new Map((rows ?? []).map((row) => [row.id, row]));
-  const results: FinalizeItemResult[] = [];
-
-  await runPool(ids, 8, async (id) => {
+  const already: FinalizeItemResult[] = [];
+  const pending: string[] = [];
+  for (const id of ids) {
     const file = byId.get(id);
     if (!file) {
-      results.push({ id, status: "failed", error: "Upload not found." });
-      return;
+      already.push({ id, status: "failed", error: "Upload not found." });
+      continue;
     }
     if (file.status === "backed_up") {
-      results.push({ id, status: "backed_up" });
+      already.push({ id, status: "backed_up" });
+      continue;
+    }
+    pending.push(id);
+  }
+
+  if (pending.length) {
+    await admin
+      .from("cloud_files")
+      .update({ status: "verifying", updated_at: new Date().toISOString() })
+      .in("id", pending)
+      .eq("owner_id", context.userId)
+      .eq("workspace_id", context.workspaceId);
+  }
+
+  const verified: Array<{ id: string; filename: string; sizeBytes: number; checksumVerified: boolean }> = [];
+  const failed: FinalizeItemResult[] = [];
+
+  await runPool(pending, 16, async (id) => {
+    const file = byId.get(id);
+    if (!file) {
+      failed.push({ id, status: "failed", error: "Upload not found." });
       return;
     }
     try {
-      await admin.from("cloud_files").update({ status: "verifying", updated_at: new Date().toISOString() }).eq("id", id).eq("owner_id", context.userId);
       const object = await inspectObject(file.object_key);
       const sizeMatches = object.size === Number(file.size_bytes);
       const checksumMatches = !object.checksumSha256 || object.checksumSha256 === file.checksum_sha256;
       if (!sizeMatches || !checksumMatches) {
-        await admin.from("cloud_files").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", id).eq("owner_id", context.userId);
-        results.push({ id, status: "failed", error: "Upload verification failed." });
+        failed.push({ id, status: "failed", error: "Upload verification failed." });
         return;
       }
-      await admin.from("cloud_files").update({ status: "backed_up", updated_at: new Date().toISOString() }).eq("id", id).eq("owner_id", context.userId);
-      await emitAuditEvent({
-        workspaceId: context.workspaceId,
-        actorId: context.userId,
-        eventType: "cloud.uploaded",
-        targetType: "cloud_file",
-        targetId: id,
-        metadata: { filename: file.original_filename, sizeBytes: file.size_bytes, checksumVerified: Boolean(object.checksumSha256) },
+      verified.push({
+        id,
+        filename: file.original_filename,
+        sizeBytes: Number(file.size_bytes),
+        checksumVerified: Boolean(object.checksumSha256),
       });
-      results.push({ id, status: "backed_up" });
     } catch {
-      results.push({ id, status: "failed", error: "Upload could not be verified." });
+      failed.push({ id, status: "failed", error: "Upload could not be verified." });
     }
   });
 
+  if (verified.length) {
+    await admin
+      .from("cloud_files")
+      .update({ status: "backed_up", updated_at: new Date().toISOString() })
+      .in("id", verified.map((row) => row.id))
+      .eq("owner_id", context.userId)
+      .eq("workspace_id", context.workspaceId);
+    await Promise.all(verified.map((row) => emitAuditEvent({
+      workspaceId: context.workspaceId,
+      actorId: context.userId,
+      eventType: "cloud.uploaded",
+      targetType: "cloud_file",
+      targetId: row.id,
+      metadata: { filename: row.filename, sizeBytes: row.sizeBytes, checksumVerified: row.checksumVerified },
+    })));
+  }
+  if (failed.length) {
+    await admin
+      .from("cloud_files")
+      .update({ status: "failed", updated_at: new Date().toISOString() })
+      .in("id", failed.map((row) => row.id))
+      .eq("owner_id", context.userId)
+      .eq("workspace_id", context.workspaceId);
+  }
+
+  const results: FinalizeItemResult[] = [
+    ...already,
+    ...verified.map((row) => ({ id: row.id, status: "backed_up" as const })),
+    ...failed,
+  ];
   const order = new Map(ids.map((id, index) => [id, index]));
   results.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   return results;

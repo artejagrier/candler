@@ -96,6 +96,72 @@ export async function ensureFolderPath(
   return parentId;
 }
 
+export async function ensureFolderPaths(
+  admin: SupabaseClient,
+  input: { workspaceId: string; ownerId: string; projectId: string | null; parentId: string | null },
+  relativePaths: string[],
+  cache: FolderPathCache,
+) {
+  const prefixes = new Set<string>();
+  for (const relativePath of relativePaths) {
+    const parts = relativePath.split("/").filter(Boolean);
+    parts.pop();
+    let walked = "";
+    for (const name of parts) {
+      walked = walked ? `${walked}/${name}` : name;
+      prefixes.add(walked);
+    }
+  }
+  const byDepth = new Map<number, string[]>();
+  for (const prefix of prefixes) {
+    const depth = prefix.split("/").length;
+    const list = byDepth.get(depth) ?? [];
+    list.push(prefix);
+    byDepth.set(depth, list);
+  }
+  for (const depth of [...byDepth.keys()].sort((a, b) => a - b)) {
+    const missing: Array<{ prefix: string; name: string; parentId: string | null }> = [];
+    for (const prefix of byDepth.get(depth) ?? []) {
+      const cacheKey = `${input.workspaceId}:${input.ownerId}:${input.parentId ?? ""}:${prefix}`;
+      if (cache.has(cacheKey)) continue;
+      const segments = prefix.split("/");
+      const name = segments.at(-1) ?? prefix;
+      const parentPrefix = segments.slice(0, -1).join("/");
+      const parentId = parentPrefix
+        ? cache.get(`${input.workspaceId}:${input.ownerId}:${input.parentId ?? ""}:${parentPrefix}`) ?? input.parentId
+        : input.parentId;
+      missing.push({ prefix, name, parentId: parentId ?? null });
+    }
+    if (!missing.length) continue;
+    const { data, error } = await admin
+      .from("cloud_folders")
+      .insert(missing.map((row) => ({
+        workspace_id: input.workspaceId,
+        owner_id: input.ownerId,
+        project_id: input.projectId,
+        parent_id: row.parentId,
+        name: row.name,
+      })))
+      .select("id,name,parent_id");
+    if (error || !data) {
+      for (const row of missing) {
+        await ensureFolderPath(admin, { ...input, relativePath: `${row.prefix}/file` }, cache);
+      }
+      continue;
+    }
+    const unused = new Set(data.map((row) => row.id));
+    for (const row of missing) {
+      const created = data.find((item) => unused.has(item.id) && item.name === row.name && (item.parent_id ?? null) === (row.parentId ?? null));
+      if (!created) {
+        await ensureFolderPath(admin, { ...input, relativePath: `${row.prefix}/file` }, cache);
+        continue;
+      }
+      unused.delete(created.id);
+      cache.set(`${input.workspaceId}:${input.ownerId}:${input.parentId ?? ""}:${row.prefix}`, created.id);
+    }
+  }
+}
+
 export async function descendantFolderIds(
   admin: SupabaseClient,
   folderId: string,

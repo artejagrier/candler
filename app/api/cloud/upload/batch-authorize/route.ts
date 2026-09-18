@@ -6,6 +6,8 @@ import { uploadBatchInput } from "@/lib/cloud/batch-schema";
 import { MAX_BATCH_AUTHORIZED_FILES_PER_MINUTE } from "@/lib/cloud/limits";
 import { publicCloudError } from "@/lib/cloud/errors";
 
+export const maxDuration = 60;
+
 function rateLimited(error: unknown) {
   return Boolean(error && typeof error === "object" && "status" in error && (error as { status?: number }).status === 429);
 }

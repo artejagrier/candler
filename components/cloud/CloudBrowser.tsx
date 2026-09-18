@@ -23,19 +23,23 @@ import {
 } from "@/lib/cloud/smart-ignore";
 import {
   TransferCancelled,
+  authorizeTimeoutMs,
   classifyCrossOriginFetchError,
   classifyPutBodyHint,
   describeTransferFailure,
   fetchWithRetry,
   formatAuthorizeTimings,
+  isUnresolvedTransferStatus,
   isUsableUploadUrl,
   putTimeoutMs,
   runPool,
+  shouldReauthorizePut,
   type AuthorizeServerTimings,
   type TransferItem,
   type TransferProfile,
 } from "@/lib/cloud/transfer";
 import { runPipelinedBatches, nextPutConcurrency, initialPutConcurrency, authorizeBatches } from "@/lib/cloud/pipeline";
+import { browserSignedPutHeaders } from "@/lib/cloud/r2-cors";
 import { averageMs, describeEta, percentile } from "@/lib/cloud/stats";
 import { summarizeBackup } from "@/lib/cloud/backup-state";
 import { CloudTransfer } from "@/components/cloud/CloudTransfer";
@@ -251,8 +255,12 @@ export function CloudBrowser({
   function retryFailed() {
     const current = transferRef.current;
     if (!current || busy) return;
-    const failed = new Set((itemsRef.current.length ? itemsRef.current : current.items).filter((item) => item.status === "failed").map((item) => item.relativePath));
-    const sources = keepRef.current.filter((source) => failed.has(source.relativePath));
+    const unresolved = new Set(
+      (itemsRef.current.length ? itemsRef.current : current.items)
+        .filter((item) => isUnresolvedTransferStatus(item.status))
+        .map((item) => item.relativePath),
+    );
+    const sources = keepRef.current.filter((source) => unresolved.has(source.relativePath));
     if (!sources.length) return;
     void uploadSources(sources, {
       skipped: current.skipped,
@@ -393,7 +401,7 @@ export function CloudBrowser({
                 })),
               }),
               signal,
-            }, { ...retryOpts, timeoutMs: 60_000 });
+            }, { ...retryOpts, timeoutMs: authorizeTimeoutMs(hashed.length) });
             const body = await auth.json() as {
               error?: string;
               results?: Array<{ relativePath: string; skipped?: boolean; fileId?: string; uploadUrl?: string; error?: string }>;
@@ -403,6 +411,7 @@ export function CloudBrowser({
             authorizeServer = formatAuthorizeTimings(body.timings) ?? authorizeServer;
             if (!auth.ok) {
               for (const entry of hashed) {
+                if (!isUnresolvedTransferStatus(entry.item.status)) continue;
                 patchItem(entry.item.id, {
                   status: "failed",
                   error: describeTransferFailure({
@@ -455,12 +464,14 @@ export function CloudBrowser({
           } catch (error) {
             if (error instanceof TransferCancelled || cancelledRef.current) return [] as AuthWork[];
             for (const entry of hashed) {
+              const live = itemsRef.current[itemIndexRef.current.get(entry.item.id) ?? -1];
+              if (live && !isUnresolvedTransferStatus(live.status)) continue;
               patchItem(entry.item.id, {
                 status: "failed",
                 error: describeTransferFailure({
                   relativePath: entry.item.relativePath,
                   stage: "authorize",
-                  error: error instanceof Error ? error.message : "Upload could not be authorized.",
+                  error: error instanceof Error ? error : "Upload could not be authorized.",
                 }),
               });
             }
@@ -477,15 +488,36 @@ export function CloudBrowser({
             const t0 = performance.now();
             counters.putRequests += 1;
             try {
-              const put = await fetchWithRetry(entry.uploadUrl, {
-                method: "PUT",
-                headers: {
-                  "Content-Type": entry.source.file.type || "application/octet-stream",
-                  "x-amz-checksum-sha256": entry.checksumSha256,
-                },
-                body: entry.source.file,
-                signal,
-              }, { ...retryOpts, timeoutMs: putTimeoutMs(entry.source.file.size) });
+              const contentType = entry.source.file.type || "application/octet-stream";
+              async function putOnce(uploadUrl: string) {
+                return fetchWithRetry(uploadUrl, {
+                  method: "PUT",
+                  headers: browserSignedPutHeaders(contentType, entry.checksumSha256),
+                  body: entry.source.file,
+                  signal,
+                }, { ...retryOpts, timeoutMs: putTimeoutMs(entry.source.file.size) });
+              }
+              let put = await putOnce(entry.uploadUrl);
+              if (!put.ok && shouldReauthorizePut(put.status, classifyPutBodyHint((await put.clone().text().catch(() => "")).slice(0, 400)))) {
+                const refresh = await fetchWithRetry("/api/cloud/upload", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    projectId: uploadProjectId,
+                    filename: entry.source.file.name,
+                    relativePath: entry.source.relativePath,
+                    contentType,
+                    size: entry.source.file.size,
+                    checksumSha256: entry.checksumSha256,
+                  }),
+                  signal,
+                }, { ...retryOpts, timeoutMs: authorizeTimeoutMs(1) });
+                const refreshed = await refresh.json() as { uploadUrl?: string };
+                if (refresh.ok && isUsableUploadUrl(refreshed.uploadUrl)) {
+                  entry.uploadUrl = refreshed.uploadUrl;
+                  put = await putOnce(refreshed.uploadUrl);
+                }
+              }
               const elapsed = performance.now() - t0;
               uploadMs.push(elapsed);
               batchPutMs.push(elapsed);

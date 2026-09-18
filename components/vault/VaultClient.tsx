@@ -7,13 +7,14 @@ import { Copy, Eye, EyeOff, Lock, Pencil, Plus, Trash2, Upload } from "lucide-re
 import { createSecretAction, deleteSecretAction, importEnvAction, updateSecretAction } from "@/lib/product/actions";
 import { parseEnvFile } from "@/lib/vault/env-import";
 import { observeCopy } from "@/lib/product/client-security";
-import { vaultSearchHaystack, vaultUserError, type VaultPendingAuth } from "@/lib/vault/client-copy";
+import { vaultSearchHaystack, vaultSaveError, vaultSecretDisplayName, vaultUserError, type VaultPendingAuth } from "@/lib/vault/client-copy";
 import { StepUpDialog } from "@/components/product/StepUpDialog";
+import { AddSecretDialog, type AddSecretPayload } from "@/components/vault/AddSecretDialog";
 import { VaultDialog } from "@/components/vault/VaultDialog";
 import { ProtectVaultDialog, UnlockVaultDialog } from "@/components/vault/VaultPhraseDialogs";
 import { SmartImportDialog } from "@/components/vault/SmartImportDialog";
 import { useHideSecretsOnVaultLock, useVaultUnlock } from "@/components/vault/VaultUnlockContext";
-import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase";
+import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase-copy";
 import { readUnlockExpiresAt } from "@/lib/vault/unlock-timer";
 
 type Project = { id: string; name: string; environments: { id: string; name: string; kind: string }[] };
@@ -21,6 +22,8 @@ type Secret = {
   id: string;
   name: string;
   notes: string | null;
+  tags?: string[] | null;
+  secret_type?: string | null;
   expires_at: string | null;
   rotate_at: string | null;
   updated_at: string;
@@ -78,7 +81,6 @@ export function VaultClient({
   const copiedTimer = useRef<number | null>(null);
   const entries = useMemo(() => parseEnvFile(envText), [envText]);
   const first = projects[0];
-  const draftEnvironments = projects.find((project) => project.id === draftProjectId)?.environments ?? [];
   const importEnvironments = projects.find((project) => project.id === importProjectId)?.environments ?? [];
 
   const rows = useMemo(() => {
@@ -289,10 +291,12 @@ export function VaultClient({
   function showCreatedRow(input: {
     id: string;
     name: string;
-    notes: string;
+    label?: string | null;
+    notes: string | null;
     projectId: string;
     environmentId: string | null;
     serviceName: string;
+    secretType?: string;
   }) {
     const project = projects.find((item) => item.id === input.projectId);
     const environment = project?.environments.find((item) => item.id === input.environmentId);
@@ -300,6 +304,8 @@ export function VaultClient({
       id: input.id,
       name: input.name,
       notes: input.notes || null,
+      tags: input.label ? [input.label] : [],
+      secret_type: input.secretType ?? "api_key",
       expires_at: null,
       rotate_at: null,
       updated_at: new Date().toISOString(),
@@ -315,30 +321,32 @@ export function VaultClient({
     if (serviceFilter && serviceFilter !== input.serviceName) setServiceFilter("");
   }
 
-  async function onCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function onCreate(payload: AddSecretPayload) {
     if (!claim("save")) return;
-    const form = new FormData(event.currentTarget);
-    const payload = {
-      projectId: String(form.get("projectId")),
-      environmentId: String(form.get("environmentId")) || null,
-      serviceName: String(form.get("serviceName")),
-      name: String(form.get("name")),
-      value: String(form.get("value")),
-      notes: String(form.get("notes")),
-    };
     setMessage("");
     try {
       const result = await createSecretAction(payload);
       if (!result.ok) {
-        setMessage(vaultUserError("Unable to save secret.", result.error));
+        setMessage(vaultSaveError(result.error));
         return;
       }
-      if (result.data?.id) showCreatedRow({ ...payload, id: result.data.id });
+      if (result.data?.id) {
+        showCreatedRow({
+          id: result.data.id,
+          name: payload.name,
+          label: payload.label,
+          notes: payload.notes,
+          projectId: payload.projectId,
+          environmentId: payload.environmentId,
+          serviceName: payload.serviceName,
+          secretType: payload.secretType,
+        });
+      }
+      setMessage("Secret saved.");
       setOpen(false);
       router.refresh();
     } catch {
-      setMessage("Unable to save secret.");
+      setMessage("Couldn't save this secret. Please try again.");
     } finally {
       release("save");
     }
@@ -509,7 +517,7 @@ export function VaultClient({
         <Link className="quiet-link" href="/app/vault/recovery">Recovery</Link>
         <div className="flex gap-2">
           <button type="button" className="secondary-button" onClick={openSmartImport} disabled={!projects.length}><Upload />Smart Import</button>
-          <button type="button" className="primary-button" onClick={openAdd} disabled={!projects.length}><Plus />Add secret</button>
+          <button type="button" className="primary-button" onClick={openAdd} disabled={!projects.length}><Plus />Add Secret</button>
         </div>
       </div>
       {/* Project context — shows which project is in scope */}
@@ -561,7 +569,8 @@ export function VaultClient({
                       <div className="secret-name">
                         <span className="service-mark">{row.services?.name?.[0] ?? "?"}</span>
                         <span>
-                          <b>{row.name}</b>
+                          <b>{vaultSecretDisplayName(row)}</b>
+                          {row.tags?.[0] && row.tags[0] !== row.name ? <small className="secret-key-name">{row.name}</small> : null}
                           <code className="secret-masked">
                             {shown ? (
                               shown
@@ -623,43 +632,21 @@ export function VaultClient({
       {message ? <p className="security-note" role="alert">{message}</p> : <p className="security-note">Values stay encrypted until you confirm your identity and enter your Vault Phrase. Your Vault stays unlocked for five minutes after a successful unlock. Revealed values hide after 15 seconds or when the Vault locks. Keep important recovery information somewhere secure and separate from Candler—such as a reputable password manager, secure offline storage, or a written copy stored safely.</p>}
 
       {open && first ? (
-        <VaultDialog
+        <AddSecretDialog
           open
-          title="Add secret"
-          preventClose={saving}
+          projects={projects}
+          projectId={draftProjectId}
+          environmentId={draftEnvironmentId}
+          saving={saving}
+          error={message && open ? message : ""}
+          onProjectChange={(next) => {
+            setDraftProjectId(next);
+            setDraftEnvironmentId(projects.find((project) => project.id === next)?.environments[0]?.id ?? "");
+          }}
+          onEnvironmentChange={setDraftEnvironmentId}
           onClose={() => { if (!saving) setOpen(false); }}
-          footer={(
-            <>
-              <button type="button" className="secondary-button" onClick={() => setOpen(false)} disabled={saving}>Cancel</button>
-              <button form="vault-add-form" type="submit" className="primary-button" disabled={saving}>{saving ? "Saving…" : "Encrypt & save"}</button>
-            </>
-          )}
-        >
-          <form id="vault-add-form" onSubmit={(event) => void onCreate(event)}>
-            <label>Project
-              <select
-                name="projectId"
-                value={draftProjectId}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setDraftProjectId(next);
-                  setDraftEnvironmentId(projects.find((project) => project.id === next)?.environments[0]?.id ?? "");
-                }}
-              >
-                {projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
-              </select>
-            </label>
-            <label>Environment
-              <select name="environmentId" value={draftEnvironmentId} onChange={(event) => setDraftEnvironmentId(event.target.value)}>
-                {draftEnvironments.map((environment) => <option value={environment.id} key={environment.id}>{environment.name}</option>)}
-              </select>
-            </label>
-            <label>Service<input name="serviceName" required placeholder="Stripe" autoComplete="off" /></label>
-            <label>Name<input name="name" required placeholder="STRIPE_SECRET_KEY" autoComplete="off" /></label>
-            <label>Secret value<textarea name="value" required autoComplete="off" /></label>
-            <label>Notes<textarea name="notes" /></label>
-          </form>
-        </VaultDialog>
+          onCreate={onCreate}
+        />
       ) : null}
 
       {editing ? (

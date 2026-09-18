@@ -28,6 +28,11 @@ export async function runPipelinedBatches<TAuth, TUploaded>(
   await pendingFinalize;
 }
 
+export function expectedAuthorizeRequestCount(fileCount: number) {
+  if (fileCount <= 0) return 0;
+  return authorizeBatches(Array.from({ length: fileCount })).length;
+}
+
 export function nextPutConcurrency(current: number, recent429: number, recentPutMs: number[]) {
   const next = Math.min(PUT_CONCURRENCY_MAX, Math.max(PUT_CONCURRENCY_MIN, current));
   if (recent429 > 0) return Math.max(PUT_CONCURRENCY_MIN, next - 1);

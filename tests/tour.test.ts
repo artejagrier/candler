@@ -198,10 +198,14 @@ test("useTourTarget returns null gracefully when selector finds no element", () 
   );
 });
 
-test("card renders centered when rect is null (no target found)", () => {
+test("card renders viewport-aware when rect is null (no target found)", () => {
   assert.ok(
-    tour.includes("translate(-50%, -50%)") || tour.includes("translate(-50%,-50%)"),
-    "cardStyle must center the card when rect is null",
+    tour.includes("translateX(-50%)"),
+    "cardStyle must horizontally-center the card when rect is null",
+  );
+  assert.ok(
+    tour.includes("viewH * 0.30") || tour.includes("viewH * 0.3"),
+    "cardStyle must position the card above centre to avoid bottom-clip on compact viewports",
   );
 });
 

@@ -7,8 +7,8 @@ import { signedUploadUrl, isObjectStorageConfigured } from "@/lib/cloud/storage"
 import { CloudQuotaError, CloudStorageUnavailableError } from "@/lib/cloud/errors";
 import { getCurrentStorageUsage, getStorageQuota, MAX_FILE_BYTES } from "@/lib/cloud/server";
 import { MAX_BATCH_AUTHORIZED_FILES_PER_MINUTE, MAX_UPLOAD_AUTHORIZATIONS_PER_MINUTE } from "@/lib/cloud/limits";
-import { ensureFolderPath, primeFolderPathCache, type FolderPathCache } from "@/lib/cloud/operations";
-import type { AuthorizeServerTimings } from "@/lib/cloud/transfer";
+import { ensureFolderPath, ensureFolderPaths, primeFolderPathCache, type FolderPathCache } from "@/lib/cloud/operations";
+import { pickReusableAuthorizeFile, type AuthorizeServerTimings } from "@/lib/cloud/transfer";
 import type { WorkspaceContext } from "@/lib/data/workspace";
 import type { UploadFileDescriptor } from "@/lib/cloud/batch-schema";
 
@@ -87,25 +87,32 @@ export async function authorizeUploadBatch(input: {
   const paths = [...new Set(files.map((file) => file.relativePath))];
   const { data: existingRows } = await admin
     .from("cloud_files")
-    .select("id,relative_path,size_bytes,checksum_sha256,status,updated_at")
+    .select("id,relative_path,size_bytes,checksum_sha256,status,updated_at,object_key")
     .eq("workspace_id", context.workspaceId)
     .eq("owner_id", context.userId)
-    .eq("status", "backed_up")
+    .in("status", ["backed_up", "uploading"])
     .is("deleted_at", null)
     .in("relative_path", paths);
   const existingMs = performance.now() - existingStarted;
 
-  const existingByPath = new Map<string, { id: string; size_bytes: number; checksum_sha256: string | null }>();
+  const existingByPath = new Map<string, Array<{
+    id: string;
+    status: string;
+    size_bytes: number;
+    checksum_sha256: string | null;
+    object_key: string | null;
+  }>>();
   for (const row of existingRows ?? []) {
     if (!row.relative_path) continue;
-    const current = existingByPath.get(row.relative_path);
-    if (!current) {
-      existingByPath.set(row.relative_path, {
-        id: row.id,
-        size_bytes: Number(row.size_bytes),
-        checksum_sha256: row.checksum_sha256,
-      });
-    }
+    const list = existingByPath.get(row.relative_path) ?? [];
+    list.push({
+      id: row.id,
+      status: row.status,
+      size_bytes: Number(row.size_bytes),
+      checksum_sha256: row.checksum_sha256,
+      object_key: row.object_key,
+    });
+    existingByPath.set(row.relative_path, list);
   }
 
   const cache: FolderPathCache = new Map();
@@ -115,6 +122,15 @@ export async function authorizeUploadBatch(input: {
     ownerId: context.userId,
     parentId: input.folderId ?? null,
   }, cache);
+  const incomingPaths = files
+    .filter((file) => pickReusableAuthorizeFile(existingByPath.get(file.relativePath), file).action === "create")
+    .map((file) => file.relativePath);
+  await ensureFolderPaths(admin, {
+    workspaceId: context.workspaceId,
+    ownerId: context.userId,
+    projectId: input.projectId ?? null,
+    parentId: input.folderId ?? null,
+  }, incomingPaths, cache);
   const results: AuthorizeResult[] = [];
   const inserts: Array<{
     id: string;
@@ -146,15 +162,12 @@ export async function authorizeUploadBatch(input: {
   const expiresAt = new Date(Date.now() + 900_000).toISOString();
 
   for (const file of files) {
-    const match = existingByPath.get(file.relativePath);
-    if (
-      match
-      && match.size_bytes === file.size
-      && match.checksum_sha256 === file.checksumSha256
-    ) {
-      results.push({ relativePath: file.relativePath, skipped: true, fileId: match.id, reason: "unchanged" });
+    const reusable = pickReusableAuthorizeFile(existingByPath.get(file.relativePath), file);
+    if (reusable.action === "skip") {
+      results.push({ relativePath: file.relativePath, skipped: true, fileId: reusable.file.id, reason: "unchanged" });
       continue;
     }
+    if (reusable.action === "resign") continue;
     incomingBytes += file.size;
     incomingCount += 1;
   }
@@ -164,12 +177,18 @@ export async function authorizeUploadBatch(input: {
   }
 
   for (const file of files) {
-    const match = existingByPath.get(file.relativePath);
-    if (
-      match
-      && match.size_bytes === file.size
-      && match.checksum_sha256 === file.checksumSha256
-    ) {
+    const reusable = pickReusableAuthorizeFile(existingByPath.get(file.relativePath), file);
+    if (reusable.action === "skip") continue;
+    if (reusable.action === "resign") {
+      const key = reusable.file.object_key;
+      if (!key) continue;
+      toSign.push({
+        relativePath: file.relativePath,
+        fileId: reusable.file.id,
+        key,
+        contentType: file.contentType,
+        checksumSha256: file.checksumSha256,
+      });
       continue;
     }
     if (tooMany(recent, reserved + 1, cap)) {

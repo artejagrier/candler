@@ -4,7 +4,7 @@ import { useId } from "react";
 import {
   RECOVERY_PHRASE_MAX,
   recoveryPhraseCounterLabel,
-} from "@/lib/vault/recovery-phrase";
+} from "@/lib/vault/recovery-phrase-copy";
 
 export function RecoveryPhraseField({
   id,

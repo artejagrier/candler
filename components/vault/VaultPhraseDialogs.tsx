@@ -10,7 +10,7 @@ import {
   VAULT_PHRASE_SAVE_FAILED,
   confirmVaultRecoveryPhrases,
   isValidVaultRecoveryPhrase,
-} from "@/lib/vault/recovery-phrase";
+} from "@/lib/vault/recovery-phrase-copy";
 import { readUnlockExpiresAt } from "@/lib/vault/unlock-timer";
 
 export function ProtectVaultDialog({

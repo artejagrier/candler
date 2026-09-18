@@ -2,12 +2,13 @@ export interface EnvEntry { name: string; value: string; serviceName: string; is
 
 export const KNOWN_SERVICES = [
   "Stripe", "Supabase", "OpenAI", "Anthropic", "Resend",
-  "Vercel", "Cloudflare", "Cloudflare R2", "GitHub", "AWS",
+  "Vercel", "Cloudflare", "Cloudflare R2", "GitHub", "Paddle", "AWS",
   "Google", "Database", "Redis", "Twilio", "Custom",
 ] as const;
 
 export function detectService(key: string): string {
   if (/STRIPE/i.test(key)) return "Stripe";
+  if (/PADDLE/i.test(key)) return "Paddle";
   if (/SUPABASE/i.test(key)) return "Supabase";
   if (/OPENAI|OPEN_AI/i.test(key)) return "OpenAI";
   if (/ANTHROPIC/i.test(key)) return "Anthropic";

@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { formatBytes, type TransferItem, type TransferProfile } from "@/lib/cloud/transfer";
 import type { SkipRecord } from "@/lib/cloud/smart-ignore";
 import { summarizeBackup } from "@/lib/cloud/backup-state";
+import { CloudDialog } from "@/components/cloud/CloudDialog";
 
 export function CloudTransfer({
   title,
@@ -34,6 +36,7 @@ export function CloudTransfer({
   onRetry?: () => void;
   profile?: TransferProfile | null;
 }) {
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const summary = summarizeBackup(items, phase === "cancelled", Boolean(stalled));
   const total = items.length;
   const finished = phase === "done" || phase === "cancelled";
@@ -41,8 +44,8 @@ export function CloudTransfer({
   const denominator = Math.max(scanned, summary.eligible);
   const eyebrow = phase === "preparing"
     ? "Scanning…"
-    : phase === "cancelled"
-      ? "Cancelled"
+      : phase === "cancelled"
+        ? "Backup Cancelled"
       : stalled && !finished
         ? "Backup stalled"
         : verifying
@@ -63,7 +66,7 @@ export function CloudTransfer({
           <h2>{title}</h2>
         </div>
         {phase === "uploading" && onCancel ? (
-          <button type="button" className="secondary-button" onClick={onCancel}>Cancel upload</button>
+          <button type="button" className="secondary-button" onClick={() => setConfirmCancel(true)}>Cancel Backup</button>
         ) : null}
       </div>
 
@@ -98,7 +101,12 @@ export function CloudTransfer({
           {finished && summary.complete ? (
             <p className="cloud-transfer-complete">Backup Complete</p>
           ) : null}
-          {finished && !summary.complete ? (
+          {finished && phase === "cancelled" ? (
+            <p className="cloud-transfer-incomplete" role="status">
+              Backup Cancelled · {summary.uploaded.toLocaleString()} / {denominator.toLocaleString()} uploaded · {summary.verified.toLocaleString()} verified. Remaining files were not backed up.
+            </p>
+          ) : null}
+          {finished && phase !== "cancelled" && !summary.complete ? (
             <p className="cloud-transfer-incomplete" role="status">
               Backup Incomplete · {summary.verified.toLocaleString()} / {denominator.toLocaleString()} verified
             </p>
@@ -114,9 +122,9 @@ export function CloudTransfer({
               {summary.failed > 20 ? <li>and {summary.failed - 20} more…</li> : null}
             </ul>
           ) : null}
-          {finished && summary.failed > 0 && onRetry ? (
+          {finished && !summary.complete && onRetry ? (
             <button type="button" className="primary-button" onClick={onRetry}>
-              Retry failed {summary.failed === 1 ? "file" : "files"}
+              {phase === "cancelled" ? "Resume backup" : `Retry failed ${summary.failed === 1 ? "file" : "files"}`}
             </button>
           ) : null}
         </>
@@ -157,6 +165,31 @@ local delete safety ${summary.localDeleteSafety}${profile.failures?.length ? `
 Failed:
 ${profile.failures.slice(0, 20).join("\n")}` : ""}`}
         </pre>
+      ) : null}
+
+      {confirmCancel && onCancel ? (
+        <CloudDialog
+          open
+          title="Cancel this backup?"
+          onClose={() => setConfirmCancel(false)}
+          footer={(
+            <>
+              <button type="button" className="secondary-button" onClick={() => setConfirmCancel(false)}>Keep Backing Up</button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  setConfirmCancel(false);
+                  onCancel();
+                }}
+              >
+                Cancel Backup
+              </button>
+            </>
+          )}
+        >
+          <p>Files already verified by Candler will not be marked as lost. This backup will remain incomplete until you resume or restart it.</p>
+        </CloudDialog>
       ) : null}
     </section>
   );

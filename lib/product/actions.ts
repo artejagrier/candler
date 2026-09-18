@@ -8,6 +8,8 @@ import { encryptSecret } from "@/lib/security/encryption";
 import { emitAuditEvent } from "@/lib/audit/events";
 import { AUTHENTICATOR_BAD_KEY, AUTHENTICATOR_UNREADABLE, AUTHENTICATOR_UNSUPPORTED, parseTotpSetup } from "@/lib/vault/otpauth";
 import { totpSeedFingerprint } from "@/lib/vault/authenticator-fingerprint";
+import { vaultSaveError } from "@/lib/vault/client-copy";
+import { parseCreateSecretInput, serviceProviderForName } from "@/lib/vault/secret-types";
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 export type AuthenticatorAddResult =
@@ -27,9 +29,62 @@ export async function createProjectAction(input: { name: string }): Promise<Resu
 export async function renameProjectAction(input:{id:string;name:string}):Promise<Result>{try{uuid.parse(input.id);const projectName=name.parse(input.name),access=await requireProjectAccess(input.id),supabase=await createClient();const{error}=await supabase.from("projects").update({name:projectName,updated_at:new Date().toISOString()}).eq("id",input.id).eq("workspace_id",access.workspaceId);if(error)throw new Error("Project could not be renamed.");await emitAuditEvent({workspaceId:access.workspaceId,actorId:access.userId,eventType:"project.renamed",targetType:"project",targetId:input.id,metadata:{name:projectName}});revalidatePath("/app/projects");return{ok:true};}catch(e){return fail(e)}}
 export async function deleteProjectAction(input:{id:string}):Promise<Result>{try{uuid.parse(input.id);const access=await requireProjectAccess(input.id),supabase=await createClient();const{error}=await supabase.from("projects").delete().eq("id",input.id).eq("workspace_id",access.workspaceId);if(error)throw new Error("Project could not be deleted.");await emitAuditEvent({workspaceId:access.workspaceId,actorId:access.userId,eventType:"project.deleted",targetType:"project",targetId:input.id,metadata:{name:access.project.name}});revalidatePath("/app");return{ok:true};}catch(e){return fail(e)}}
 
-const secretInput=z.object({projectId:z.uuid(),environmentId:z.uuid().nullable(),serviceName:z.string().trim().min(1).max(80),name:name,value:z.string().min(1).max(65536),secretType:z.string().max(40).default("api_key"),notes:z.string().max(4000).optional(),expiresAt:z.string().datetime().nullable().optional(),rotateAt:z.string().datetime().nullable().optional()});
-async function resolveService(projectId:string,workspaceId:string,serviceName:string){const supabase=await createClient(),provider=serviceName.toLowerCase();const{data:existing}=await supabase.from("services").select("id").eq("project_id",projectId).ilike("name",serviceName).limit(1).maybeSingle();if(existing)return existing.id;const allowed=["github","supabase","stripe","vercel","cloudflare","openai","anthropic","resend"];const{data,error}=await supabase.from("services").insert({project_id:projectId,workspace_id:workspaceId,name:serviceName,provider:allowed.includes(provider)?provider:"custom"}).select("id").single();if(error||!data)throw new Error("Service could not be created.");return data.id;}
-export async function createSecretAction(raw:z.input<typeof secretInput>):Promise<Result<{id:string}>>{try{const input=secretInput.parse(raw),access=await requireProjectAccess(input.projectId),supabase=await createClient(),serviceId=await resolveService(input.projectId,access.workspaceId,input.serviceName);if(input.environmentId){const{data:env}=await supabase.from("environments").select("id").eq("id",input.environmentId).eq("project_id",input.projectId).maybeSingle();if(!env)throw new Error("Environment not found.");}const{data,error}=await supabase.from("secrets").insert({workspace_id:access.workspaceId,owner_id:access.userId,project_id:input.projectId,environment_id:input.environmentId,service_id:serviceId,name:input.name,secret_type:input.secretType,notes:input.notes||null,expires_at:input.expiresAt||null,rotate_at:input.rotateAt||null,...encryptedColumns(input.value)}).select("id").single();if(error||!data)throw new Error("Secret could not be stored.");await emitAuditEvent({workspaceId:access.workspaceId,actorId:access.userId,eventType:"secret.created",targetType:"secret",targetId:data.id,metadata:{name:input.name,service:input.serviceName,projectId:input.projectId,environmentId:input.environmentId}});revalidatePath("/app/vault");return{ok:true,data:{id:data.id}};}catch(e){return fail(e)}}
+async function resolveService(projectId: string, workspaceId: string, serviceName: string) {
+  const supabase = await createClient();
+  const { data: existing } = await supabase.from("services").select("id").eq("project_id", projectId).ilike("name", serviceName).limit(1).maybeSingle();
+  if (existing) return existing.id;
+  const { data, error } = await supabase.from("services").insert({
+    project_id: projectId,
+    workspace_id: workspaceId,
+    name: serviceName,
+    provider: serviceProviderForName(serviceName),
+  }).select("id").single();
+  if (error || !data) throw new Error("Couldn't save this secret. Please try again.");
+  return data.id;
+}
+
+export async function createSecretAction(raw: unknown): Promise<Result<{ id: string }>> {
+  try {
+    const input = parseCreateSecretInput(raw as Parameters<typeof parseCreateSecretInput>[0]);
+    const access = await requireProjectAccess(input.projectId);
+    const supabase = await createClient();
+    const serviceId = await resolveService(input.projectId, access.workspaceId, input.serviceName);
+    if (input.environmentId) {
+      const { data: env } = await supabase.from("environments").select("id").eq("id", input.environmentId).eq("project_id", input.projectId).maybeSingle();
+      if (!env) throw new Error("Choose a valid environment before saving.");
+    }
+    const tags = input.label ? [input.label.slice(0, 80)] : [];
+    const { data, error } = await supabase.from("secrets").insert({
+      workspace_id: access.workspaceId,
+      owner_id: access.userId,
+      project_id: input.projectId,
+      environment_id: input.environmentId,
+      service_id: serviceId,
+      name: input.name,
+      secret_type: input.secretType,
+      notes: input.notes,
+      tags,
+      ...encryptedColumns(input.value),
+    }).select("id").single();
+    if (error || !data) throw new Error("Couldn't save this secret. Please try again.");
+    try {
+      await emitAuditEvent({
+        workspaceId: access.workspaceId,
+        actorId: access.userId,
+        eventType: "secret.created",
+        targetType: "secret",
+        targetId: data.id,
+        metadata: { name: input.name, service: input.serviceName, projectId: input.projectId, environmentId: input.environmentId, secretType: input.secretType },
+      });
+    } catch {
+      // Secret already persisted. Audit must not fail create.
+    }
+    revalidatePath("/app/vault");
+    return { ok: true, data: { id: data.id } };
+  } catch (e) {
+    return { ok: false, error: vaultSaveError(e) };
+  }
+}
 export async function updateSecretAction(raw:{id:string;name:string;notes?:string;expiresAt?:string|null;rotateAt?:string|null;value?:string}):Promise<Result>{try{const input=z.object({id:uuid,name,notes:z.string().max(4000).optional(),expiresAt:z.string().datetime().nullable().optional(),rotateAt:z.string().datetime().nullable().optional(),value:z.string().min(1).max(65536).optional()}).parse(raw),context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{data:current}=await supabase.from("secrets").select("id").eq("id",input.id).eq("workspace_id",context.workspaceId).eq("owner_id",context.userId).maybeSingle();if(!current)throw new Error("Secret not found.");const patch:Record<string,unknown>={name:input.name,notes:input.notes||null,expires_at:input.expiresAt||null,rotate_at:input.rotateAt||null,updated_at:new Date().toISOString()};if(input.value)Object.assign(patch,encryptedColumns(input.value));const{error}=await supabase.from("secrets").update(patch).eq("id",input.id).eq("owner_id",context.userId);if(error)throw new Error("Secret could not be updated.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:input.value?"secret.rotated":"secret.updated",targetType:"secret",targetId:input.id,metadata:{name:input.name}});revalidatePath("/app/vault");return{ok:true};}catch(e){return fail(e)}}
 export async function deleteSecretAction(id:string):Promise<Result>{try{uuid.parse(id);const context=await getWorkspaceContext();if(!context)throw new Error("Workspace unavailable.");const supabase=await createClient();const{data}=await supabase.from("secrets").select("id,name").eq("id",id).eq("workspace_id",context.workspaceId).eq("owner_id",context.userId).maybeSingle();if(!data)throw new Error("Secret not found.");const{error}=await supabase.from("secrets").delete().eq("id",id).eq("owner_id",context.userId);if(error)throw new Error("Secret could not be deleted.");await emitAuditEvent({workspaceId:context.workspaceId,actorId:context.userId,eventType:"secret.deleted",targetType:"secret",targetId:id,metadata:{name:data.name}});revalidatePath("/app/vault");return{ok:true};}catch(e){return fail(e)}}
 

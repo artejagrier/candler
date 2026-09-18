@@ -86,15 +86,19 @@ test("batch routes keep server-side isolation contracts", () => {
   assert.equal(cors.includes('"PUT"'), true);
   assert.equal(cors.includes("content-type"), true);
   assert.equal(cors.includes("x-amz-checksum-sha256"), true);
+  assert.equal(cors.includes("x-amz-content-sha256"), true);
   assert.equal(cors.includes("AllowedOrigins\": [\"*\"]") || cors.includes("\"*\""), false);
   const transferUi = readFileSync(new URL("../components/cloud/CloudTransfer.tsx", import.meta.url), "utf8");
   assert.equal(transferUi.includes("cloud-transfer-fail-list"), true);
   assert.equal(transferUi.includes("Backup Incomplete"), true);
   assert.equal(transferUi.includes("Retry failed"), true);
+  assert.equal(transferUi.includes("Cancel Backup"), true);
+  assert.equal(transferUi.includes("Keep Backing Up"), true);
+  assert.equal(transferUi.includes("Backup Cancelled"), true);
   assert.equal(transferUi.includes("summarizeBackup"), true);
 });
 
-test("adaptive put concurrency stays inside 4-8 and drops on 429", () => {
+test("adaptive put concurrency stays inside 4-12 and drops on 429", () => {
   assert.equal(nextPutConcurrency(6, 1, [200, 200, 200, 200]), 5);
   assert.equal(nextPutConcurrency(4, 1, [100]), PUT_CONCURRENCY_MIN);
   const raised = nextPutConcurrency(6, 0, [200, 220, 180, 190]);
@@ -113,6 +117,11 @@ test("large folders authorize a small first batch so uploads can start immediate
   assert.equal(large[0]?.length, FIRST_AUTHORIZE_BATCH);
   assert.equal(large[1]?.length, AUTHORIZE_BATCH_SIZE);
   assert.equal(large.reduce((sum, batch) => sum + batch.length, 0), 20_652);
+  const huge = authorizeBatches(Array.from({ length: 27_704 }, (_, i) => i));
+  const { expectedAuthorizeRequestCount } = await import("../lib/cloud/pipeline");
+  assert.equal(huge.reduce((sum, batch) => sum + batch.length, 0), 27_704);
+  assert.equal(expectedAuthorizeRequestCount(27_704), huge.length);
+  assert.equal(huge.length < 27_704, true);
 });
 
 test("pipelined batches authorize the next group while the current group uploads", async () => {

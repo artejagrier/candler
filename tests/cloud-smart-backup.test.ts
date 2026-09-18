@@ -79,9 +79,10 @@ test("transfer errors stay specific without leaking signed URLs", () => {
   assert.equal(leaked.includes("SECRETVALUE"), false);
   assert.equal(leaked.includes("X-Amz-Signature"), false);
   assert.equal(leaked.includes("cloudflarestorage"), false);
-  assert.match(leaked, /CORS preflight/);
-  assert.equal(classifyCrossOriginFetchError(new Error("Failed to fetch")), "cors");
+  assert.match(leaked, /network failure/);
+  assert.equal(classifyCrossOriginFetchError(new Error("Failed to fetch")), "network");
   assert.equal(classifyCrossOriginFetchError(new TransferCancelled()), "aborted");
+  assert.equal(classifyCrossOriginFetchError(new Error("CORS preflight blocked")), "cors");
   assert.match(describeTransferFailure({ relativePath: "a.ts", stage: "put", kind: "network" }), /network failure/);
   assert.match(describeTransferFailure({ relativePath: "a.ts", stage: "put", kind: "aborted" }), /PUT aborted/);
   assert.match(describeTransferFailure({ relativePath: "a.ts", stage: "put", status: 403 }), /PUT HTTP 403/);

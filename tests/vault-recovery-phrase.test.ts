@@ -155,10 +155,11 @@ test("Vault reveal, copy, recovery codes, and authenticator seeds require server
   assert.equal(seedReveal.includes("authorizeVaultSecretAccess"), true);
   assert.equal(vaultClient.includes("ProtectVaultDialog"), true);
   assert.equal(vaultClient.includes("UnlockVaultDialog"), true);
+  assert.equal(vaultClient.includes("AddSecretDialog"), true);
   assert.equal(vaultClient.includes('intent, recoveryPhrase'), true);
   assert.equal(vaultClient.includes("revealed[id]"), true);
   assert.equal(vaultClient.includes("Leave blank to keep the current value"), true);
-  assert.equal(vaultClient.includes("secretType"), false);
+  assert.equal(vaultClient.includes("secretType"), true);
   assert.equal(phraseUi.includes("Write your Vault Phrase down"), true);
   assert.equal(phraseUi.includes("Candler will never display your Vault Phrase"), true);
   assert.equal(phraseUi.includes("Candler support will never ask you to send us your Vault Phrase."), true);

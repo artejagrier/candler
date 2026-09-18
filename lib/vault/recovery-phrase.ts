@@ -11,9 +11,27 @@
  */
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import {
+  isValidVaultRecoveryPhrase,
+  normalizeVaultRecoveryPhrase,
+} from "./recovery-phrase-copy";
 
-export const RECOVERY_PHRASE_MIN = 12;
-export const RECOVERY_PHRASE_MAX = 128;
+export {
+  RECOVERY_PHRASE_MIN,
+  RECOVERY_PHRASE_MAX,
+  normalizeVaultRecoveryPhrase,
+  isValidVaultRecoveryPhrase,
+  confirmVaultRecoveryPhrases,
+  recoveryPhraseCounterLabel,
+  VAULT_PHRASE_MISMATCH,
+  VAULT_PHRASE_THROTTLED,
+  VAULT_PHRASE_SETUP_REQUIRED,
+  VAULT_PHRASE_UNLOCK_REQUIRED,
+  VAULT_PHRASE_LENGTH,
+  VAULT_PHRASE_CONFIRM,
+  VAULT_PHRASE_EXISTS,
+  VAULT_PHRASE_SAVE_FAILED,
+} from "./recovery-phrase-copy";
 
 export const RECOVERY_PHRASE_KDF = {
   kdf: "scrypt" as const,
@@ -31,28 +49,6 @@ export type RecoveryPhraseHash = {
   r: number;
   p: number;
 };
-
-export function normalizeVaultRecoveryPhrase(phrase: string) {
-  return phrase.normalize("NFC").trim();
-}
-
-export function isValidVaultRecoveryPhrase(phrase: string) {
-  const normalized = normalizeVaultRecoveryPhrase(phrase);
-  return normalized.length >= RECOVERY_PHRASE_MIN && normalized.length <= RECOVERY_PHRASE_MAX;
-}
-
-export function confirmVaultRecoveryPhrases(phrase: string, confirmation: string) {
-  return normalizeVaultRecoveryPhrase(phrase) === normalizeVaultRecoveryPhrase(confirmation)
-    && isValidVaultRecoveryPhrase(phrase);
-}
-
-export function recoveryPhraseCounterLabel(raw: string) {
-  const length = Math.min(raw.length, RECOVERY_PHRASE_MAX);
-  if (normalizeVaultRecoveryPhrase(raw).length < RECOVERY_PHRASE_MIN) {
-    return `${length} / ${RECOVERY_PHRASE_MAX} characters · Minimum ${RECOVERY_PHRASE_MIN}`;
-  }
-  return `${length} / ${RECOVERY_PHRASE_MAX} characters`;
-}
 
 export function hashVaultRecoveryPhrase(phrase: string, saltHex = randomBytes(16).toString("hex")): RecoveryPhraseHash {
   const normalized = normalizeVaultRecoveryPhrase(phrase);
@@ -91,12 +87,3 @@ export function lockDurationMs(failedAttempts: number) {
   if (failedAttempts < 12) return 5 * 60_000;
   return 15 * 60_000;
 }
-
-export const VAULT_PHRASE_MISMATCH = "That Vault Phrase didn't match.";
-export const VAULT_PHRASE_THROTTLED = "Too many attempts. Try again in a moment.";
-export const VAULT_PHRASE_SETUP_REQUIRED = "Create a Vault Phrase to protect your Vault.";
-export const VAULT_PHRASE_UNLOCK_REQUIRED = "Enter your Vault Phrase to view this secret.";
-export const VAULT_PHRASE_LENGTH = "Vault Phrase must be 12–128 characters.";
-export const VAULT_PHRASE_CONFIRM = "Vault Phrase and confirmation must match.";
-export const VAULT_PHRASE_EXISTS = "A Vault Phrase is already set for this Vault.";
-export const VAULT_PHRASE_SAVE_FAILED = "Vault Phrase could not be saved.";

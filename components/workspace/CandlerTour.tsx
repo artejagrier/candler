@@ -114,18 +114,21 @@ function useTourTarget(selector: string | undefined, phase: Phase) {
 }
 
 function cardStyle(rect: DOMRect | null): React.CSSProperties {
-  if (!rect) {
-    return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
-  }
-
   const CARD_W = 352;
-  const CARD_H_EST = 240;
+  const CARD_H_EST = 320;
   const GAP = 20;
   const viewW = window.innerWidth;
   const viewH = window.innerHeight;
 
   if (viewW < 640) {
     return { bottom: 0, left: 0, right: 0 };
+  }
+
+  if (!rect) {
+    // Sit at ~30 % from the top (above centre) so the card clears the viewport
+    // bottom on compact Windows laptops (1366×768 at 125–150 % display scaling).
+    const top = Math.max(GAP, Math.min(Math.round(viewH * 0.30), viewH - CARD_H_EST - GAP));
+    return { top, left: "50%", transform: "translateX(-50%)" };
   }
 
   const centerY = Math.round(rect.top + rect.height / 2);

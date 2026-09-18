@@ -3,6 +3,13 @@
  * Does not change R2 signing, quota math, or who may set backed_up.
  */
 
+import {
+  AUTHORIZE_CLIENT_TIMEOUT_SAFETY_MS,
+  AUTHORIZE_SERVER_MAX_DURATION_SECONDS,
+  AUTHORIZE_TIMEOUT_BASE_MS,
+  AUTHORIZE_TIMEOUT_PER_FILE_MS,
+} from "@/lib/cloud/limits";
+
 export const TRANSFER_CONCURRENCY = 4;
 export const TRANSFER_RETRIES = 3;
 export const PUT_TIMEOUT_MIN_MS = 45_000;
@@ -138,7 +145,11 @@ export function classifyCrossOriginFetchError(error: unknown): "cors" | "network
   const raw = error instanceof Error ? `${error.name} ${error.message}` : String(error ?? "");
   if (/abort/i.test(raw)) return "aborted";
   if (typeof navigator !== "undefined" && navigator.onLine === false) return "network";
-  if (/failed to fetch|networkerror|load failed|failed to load/i.test(raw)) return "cors";
+  // Browsers report CORS preflight failure, connection reset, DNS, and offline
+  // as TypeError "Failed to fetch". Only call it CORS when the runtime said so.
+  if (/\bcors\b|access-control-allow-origin|preflight/i.test(raw) && !/failed to fetch|networkerror|load failed/i.test(raw)) {
+    return "cors";
+  }
   return "network";
 }
 
@@ -169,6 +180,11 @@ export function describeTransferFailure(input: {
   if (/could not be found at the time an operation was processed/i.test(String(input.error ?? raw))) {
     return `${name} — file handle expired after hashing`;
   }
+  if (/timed out/i.test(raw)) {
+    if (input.stage === "authorize") return `${name} — authorization timed out (network)`;
+    if (input.stage === "verify") return `${name} — verification timed out (network)`;
+    return `${name} — PUT timed out (network)`;
+  }
   if (input.stage === "put") {
     const kind = input.kind ?? (input.error ? classifyCrossOriginFetchError(input.error) : undefined);
     if (kind === "aborted") return `${name} — PUT aborted`;
@@ -178,7 +194,7 @@ export function describeTransferFailure(input: {
   if (/failed to fetch|networkerror|load failed|failed to load/i.test(raw)) {
     if (input.stage === "authorize") return `${name} — authorization blocked (network)`;
     if (input.stage === "verify") return `${name} — verification blocked (network)`;
-    return `${name} — PUT blocked by CORS preflight`;
+    return `${name} — PUT network failure`;
   }
   if (input.stage === "authorize") return `${name} — ${raw || "authorization failed"}`;
   if (input.stage === "verify") return `${name} — ${raw || "verification failed"}`;
@@ -186,11 +202,55 @@ export function describeTransferFailure(input: {
 }
 
 export function classifyPutBodyHint(text: string) {
+  if (/Request has expired|ExpiredToken|expires/i.test(text)) return "expired signed URL";
   if (/SignatureDoesNotMatch/i.test(text)) return "signature mismatch";
   if (/AccessDenied/i.test(text)) return "access denied";
   if (/checksum|XAmzContentSHA256Mismatch/i.test(text)) return "checksum mismatch";
   if (/InvalidRequest|IncompleteBody|EntityTooSmall/i.test(text)) return "invalid request";
   return undefined;
+}
+
+export function shouldReauthorizePut(status: number, bodyHint?: string) {
+  if (status !== 403) return false;
+  return !bodyHint || /expired signed URL|signature mismatch|access denied/i.test(bodyHint);
+}
+
+export function authorizeServerLimitMs() {
+  return AUTHORIZE_SERVER_MAX_DURATION_SECONDS * 1000;
+}
+
+export function authorizeClientTimeoutCapMs() {
+  return authorizeServerLimitMs() - AUTHORIZE_CLIENT_TIMEOUT_SAFETY_MS;
+}
+
+export function authorizeTimeoutMs(fileCount: number) {
+  const estimated = AUTHORIZE_TIMEOUT_BASE_MS + Math.max(1, fileCount) * AUTHORIZE_TIMEOUT_PER_FILE_MS;
+  return Math.min(authorizeClientTimeoutCapMs(), estimated);
+}
+
+export type ReusableAuthorizeFile = {
+  id: string;
+  status: string;
+  size_bytes: number;
+  checksum_sha256: string | null;
+  object_key: string | null;
+};
+
+export function pickReusableAuthorizeFile(
+  rows: ReusableAuthorizeFile[] | undefined,
+  file: { size: number; checksumSha256: string },
+): { action: "skip"; file: ReusableAuthorizeFile } | { action: "resign"; file: ReusableAuthorizeFile } | { action: "create" } {
+  if (!rows?.length) return { action: "create" };
+  const same = rows.filter((row) => row.size_bytes === file.size && row.checksum_sha256 === file.checksumSha256);
+  const backedUp = same.find((row) => row.status === "backed_up");
+  if (backedUp) return { action: "skip", file: backedUp };
+  const uploading = same.find((row) => row.status === "uploading" && Boolean(row.object_key));
+  if (uploading) return { action: "resign", file: uploading };
+  return { action: "create" };
+}
+
+export function isUnresolvedTransferStatus(status: string) {
+  return status !== "backed_up" && status !== "skipped";
 }
 
 export function retryDelayMs(attempt: number, retryAfterHeader: string | null) {
@@ -256,6 +316,10 @@ export async function fetchWithRetry(
       const timedOut = Boolean(timeout?.aborted);
       if (!timedOut && (error instanceof TransferCancelled || (error instanceof DOMException && error.name === "AbortError"))) {
         throw new TransferCancelled();
+      }
+      const kind = classifyCrossOriginFetchError(error);
+      if (kind === "cors") {
+        throw error;
       }
       if (attempt >= retries) {
         if (timedOut) throw new Error("Upload timed out.");

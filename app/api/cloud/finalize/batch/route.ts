@@ -3,6 +3,8 @@ import { requireCloudActor } from "@/lib/cloud/operations";
 import { finalizeBatchInput } from "@/lib/cloud/batch-schema";
 import { finalizeUploadBatch } from "@/lib/cloud/finalize-batch";
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const { context, admin } = await requireCloudActor();

@@ -7,7 +7,7 @@ import { observeCopy } from "@/lib/product/client-security";
 import { StepUpDialog } from "@/components/product/StepUpDialog";
 import { ProtectVaultDialog, UnlockVaultDialog } from "@/components/vault/VaultPhraseDialogs";
 import { useHideSecretsOnVaultLock, useVaultUnlock } from "@/components/vault/VaultUnlockContext";
-import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase";
+import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase-copy";
 import { readUnlockExpiresAt } from "@/lib/vault/unlock-timer";
 
 type Set = { id: string; service: string; account_name: string; total_count: number; remaining_count: number; updated_at: string };
