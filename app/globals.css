@@ -428,6 +428,25 @@
 .vault-phrase-count{font-size:.68rem;color:var(--color-slate-muted);letter-spacing:.01em;margin-top:.15rem}
 .vault-phrase-error{font-size:.72rem;color:var(--color-danger, #f87171)}
 .vault-phrase-safety{color:var(--color-foreground)!important;font-size:.86rem!important;font-weight:560;line-height:1.5}
+.vault-phrase-setup{margin:0 0 1.2rem;padding:1.1rem 1.15rem 1.15rem;border:1px solid var(--color-line);border-radius:1rem;background:color-mix(in srgb, var(--color-foreground) 4%, transparent)}
+.vault-phrase-setup-title{margin:0 0 .45rem;font-size:1.05rem;font-weight:700;color:var(--color-foreground);line-height:1.25}
+.vault-phrase-setup-copy{margin:0 0 .7rem;font-size:.82rem;line-height:1.55;color:var(--color-fog)}
+.vault-phrase-setup-helper{margin:0 0 .85rem;font-size:.74rem;line-height:1.5;color:var(--color-slate-muted)}
+.vault-phrase-setup-form{margin:0}
+.vault-phrase-setup-toolbar{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:.15rem}
+.vault-phrase-reveal{border:0;background:none;padding:.2rem 0;font:inherit;font-size:.75rem;font-weight:600;color:var(--color-fog);cursor:pointer}
+.vault-phrase-reveal:hover,.vault-phrase-reveal:focus-visible{color:var(--color-foreground)}
+.vault-phrase-setup-toolbar .primary-button{margin-left:auto}
+.vault-phrase-setup-error{margin:.75rem 0 0;color:#ff8aa0;font-size:.78rem}
+.vault-phrase-setup--tour{margin:0 0 .35rem;padding:0;border:0;background:none;border-radius:0}
+.vault-phrase-setup--tour .vault-phrase-setup-title{font-size:1.05rem}
+.vault-phrase-setup--tour .vault-phrase-setup-copy{font-size:.8rem}
+.vault-phrase-setup--dialog{margin:0;padding:0;border:0;background:none;border-radius:0}
+.vault-phrase-setup--dialog .vault-phrase-setup-toolbar .primary-button{margin-left:0}
+@media(max-width:430px){
+  .vault-phrase-setup-toolbar{flex-direction:column;align-items:stretch}
+  .vault-phrase-setup-toolbar .primary-button{margin-left:0;width:100%}
+}
 .vault-unlock-bar{margin:0 0 1.15rem;padding:0 0 .8rem;border-bottom:1px solid var(--color-line)}
 .vault-unlock-row{display:flex;align-items:center;gap:.55rem;min-height:1.35rem}
 .vault-unlock-row svg{width:.9rem;height:.9rem;flex-shrink:0;color:var(--color-fog)}
@@ -571,7 +590,7 @@ html[data-scheme="light"] .plan-tile{background:#fff}
 .tour-spotlight{position:fixed;pointer-events:none;border-radius:.6rem;box-shadow:0 0 0 9999px rgb(0 0 0/.65);z-index:calc(var(--z-modal) + 1);transition:top .22s ease,left .22s ease,width .22s ease,height .22s ease}
 
 /* Card */
-.tour-card{position:fixed;z-index:calc(var(--z-modal) + 2);width:min(22rem,calc(100vw - 2rem));max-height:90dvh;overflow:auto;padding:1.4rem 1.35rem 1.3rem;border:1px solid var(--border,var(--color-line));border-radius:1rem;background:var(--surface-elevated,var(--color-ink-overlay));box-shadow:0 32px 80px rgb(0 0 0/.55),inset 0 1px 0 rgb(255 255 255/.06);animation:tour-fade-in .22s ease both;outline:none}
+.tour-card{position:fixed;z-index:calc(var(--z-modal) + 2);width:min(22rem,calc(100vw - 2rem));max-height:min(100dvh - 1.25rem, 90dvh);overflow:auto;padding:1.4rem 1.35rem 1.3rem;border:1px solid var(--border,var(--color-line));border-radius:1rem;background:var(--surface-elevated,var(--color-ink-overlay));box-shadow:0 32px 80px rgb(0 0 0/.55),inset 0 1px 0 rgb(255 255 255/.06);animation:tour-fade-in .22s ease both;outline:none;pointer-events:auto;overscroll-behavior:contain}
 .tour-card--centered{top:50%;left:50%;transform:translate(-50%,-50%)}
 
 /* Step card content */
@@ -581,6 +600,8 @@ html[data-scheme="light"] .plan-tile{background:#fff}
 .tour-appearance{display:flex;flex-direction:column;gap:.75rem;margin:.9rem 0 0}
 .tour-appearance .appearance-segment,.tour-appearance .accent-swatches{max-width:none}
 .tour-card--appearance{width:min(24rem,calc(100vw - 2rem))}
+.tour-card--vault-phrase{width:min(24rem,calc(100vw - 2rem));max-height:min(100dvh - 1.25rem, 44rem)}
+.tour-btn-next:disabled{opacity:.45;cursor:not-allowed}
 .tour-card-progress{margin:1rem 0 .75rem}
 .tour-card-actions{display:flex;align-items:center;gap:.5rem}
 
@@ -612,7 +633,7 @@ html[data-scheme="light"] .plan-tile{background:#fff}
 
 /* Mobile: card anchored to bottom */
 @media(max-width:640px){
-  .tour-card{bottom:0!important;top:auto!important;left:0!important;right:0!important;width:auto!important;transform:none!important;border-bottom-left-radius:0;border-bottom-right-radius:0;animation:tour-slide-up .22s ease both}
+  .tour-card{bottom:0!important;top:auto!important;left:0!important;right:0!important;width:auto!important;max-height:min(100dvh - 1rem, 92dvh)!important;transform:none!important;border-bottom-left-radius:0;border-bottom-right-radius:0;animation:tour-slide-up .22s ease both;padding-bottom:max(1.3rem, env(safe-area-inset-bottom))}
 }
 
 /* Reduced motion */

@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { createRecoverySetAction, deleteRecoverySetAction } from "@/lib/product/actions";
 import { observeCopy } from "@/lib/product/client-security";
 import { StepUpDialog } from "@/components/product/StepUpDialog";
 import { ProtectVaultDialog, UnlockVaultDialog } from "@/components/vault/VaultPhraseDialogs";
+import { VaultPhraseSetup } from "@/components/vault/VaultPhraseSetup";
 import { useHideSecretsOnVaultLock, useVaultUnlock } from "@/components/vault/VaultUnlockContext";
 import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase-copy";
 import { readUnlockExpiresAt } from "@/lib/vault/unlock-timer";
@@ -23,6 +25,7 @@ export function RecoveryClient({
   initialAccount?: string;
   recoveryPhraseConfigured?: boolean;
 }) {
+  const router = useRouter();
   const [revealed, setRevealed] = useState<Record<string, (string | null)[]>>({});
   const [remaining, setRemaining] = useState<Record<string, number>>(Object.fromEntries(sets.map((set) => [set.id, set.remaining_count])));
   const [open, setOpen] = useState(() => Boolean(initialService));
@@ -33,7 +36,7 @@ export function RecoveryClient({
   const [phraseError, setPhraseError] = useState("");
   const [unlockBusy, setUnlockBusy] = useState(false);
   const { applyGrant } = useVaultUnlock();
-  void recoveryPhraseConfigured;
+  const [showPhraseSetup] = useState(!recoveryPhraseConfigured);
 
   useEffect(() => {
     if (!Object.keys(revealed).length) return;
@@ -89,6 +92,14 @@ export function RecoveryClient({
 
   return (
     <>
+      {showPhraseSetup ? (
+        <VaultPhraseSetup
+          variant="page"
+          onProtected={() => {
+            router.refresh();
+          }}
+        />
+      ) : null}
       {sets.length === 0 ? (
         <div className="data-surface empty-state">
           <h2>No recovery codes yet.</h2>

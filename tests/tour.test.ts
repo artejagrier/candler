@@ -71,17 +71,14 @@ test("tour has exactly 9 content steps", () => {
 
 test("Vault tutorial explains Vault Phrase as the second lock", () => {
   const vaultBlock = tour.slice(tour.indexOf('id: "vault"'), tour.indexOf('id: "authenticator"'));
-  assert.ok(vaultBlock.includes("Your Vault Phrase is the second lock"));
-  assert.ok(vaultBlock.includes("You only need one Vault Phrase"));
-  assert.ok(vaultBlock.includes("12 and 128"));
-  assert.ok(vaultBlock.includes("Write your Vault Phrase down"));
-  assert.ok(vaultBlock.includes("five minutes"));
-  assert.ok(vaultBlock.includes("remaining unlock time"));
-  assert.ok(vaultBlock.includes("lock your Vault immediately"));
-  assert.ok(vaultBlock.includes("Candler support will never ask you to send us your Vault Phrase"));
-  assert.ok(vaultBlock.includes("Candler will never display your Vault Phrase"));
-  assert.ok(vaultBlock.includes("What's Your Favorite Scary Movie Sydney?"));
+  assert.ok(vaultBlock.includes("VAULT_PHRASE_SETUP_TITLE"));
+  assert.ok(vaultBlock.includes("VAULT_PHRASE_SETUP_COPY"));
+  assert.ok(vaultBlock.includes('interactive: "vault-phrase"'));
+  assert.equal(vaultBlock.includes("Vault stores API keys and tokens with AES-256-GCM encryption"), false);
   assert.equal(vaultBlock.includes("Recovery Phrase"), false);
+  assert.ok(tour.includes("VaultPhraseSetup"));
+  assert.ok(tour.includes("phraseBlocksNext"));
+  assert.ok(tour.includes("tour-card--vault-phrase"));
 });
 
 test("Vault tutorial keeps Recovery codes distinct from Vault Phrase", () => {
@@ -187,6 +184,8 @@ test("tour CSS includes light mode overrides", () => {
     css.includes('html[data-scheme="light"] .tour-spotlight'),
     "globals.css must override spotlight shadow for light mode",
   );
+  assert.ok(css.includes(".tour-card--vault-phrase"), "Vault Phrase tour card must have a compact overflow-safe class");
+  assert.ok(css.includes("100dvh"), "Tour cards must be able to use 100dvh to stay on-screen");
 });
 
 // ── Missing target graceful handling ─────────────────────────────────────────
@@ -204,7 +203,7 @@ test("card renders viewport-aware when rect is null (no target found)", () => {
     "cardStyle must horizontally-center the card when rect is null",
   );
   assert.ok(
-    tour.includes("viewH * 0.30") || tour.includes("viewH * 0.3"),
+    tour.includes("viewH * 0.30") || tour.includes("viewH * 0.3") || tour.includes("topBias"),
     "cardStyle must position the card above centre to avoid bottom-clip on compact viewports",
   );
 });

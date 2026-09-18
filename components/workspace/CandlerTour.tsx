@@ -7,6 +7,11 @@ import { AccentSwatches } from "@/components/theme/AccentSwatches";
 import { AppearanceToggle } from "@/components/theme/AppearanceToggle";
 import { CandlerProgress } from "@/components/ui/CandlerProgress";
 import { useModShortcutLabel } from "@/components/ui/ModShortcut";
+import { VaultPhraseSetup, type VaultPhraseSetupStatus } from "@/components/vault/VaultPhraseSetup";
+import {
+  VAULT_PHRASE_SETUP_COPY,
+  VAULT_PHRASE_SETUP_TITLE,
+} from "@/lib/vault/recovery-phrase-copy";
 
 export const TOUR_KEY = "candler-tour-v1";
 export const TOUR_REPLAY_EVENT = "candler:tour:replay";
@@ -25,7 +30,8 @@ interface TourStep {
   title: string;
   body: string;
   selector?: string;
-  interactive?: "appearance";
+  interactive?: "appearance" | "vault-phrase";
+  preferAbove?: boolean;
 }
 
 const STEPS: TourStep[] = [
@@ -33,8 +39,9 @@ const STEPS: TourStep[] = [
     id: "appearance",
     title: "Make Candler yours.",
     body: "Choose Light or Dark mode and pick an accent color that fits your workspace. You can change it anytime in Settings.",
-    selector: undefined,
+    selector: ".appearance-panel",
     interactive: "appearance",
+    preferAbove: true,
   },
   {
     id: "projects",
@@ -44,9 +51,10 @@ const STEPS: TourStep[] = [
   },
   {
     id: "vault",
-    title: "Vault — Secrets, encrypted",
-    body: "Vault stores API keys and tokens with AES-256-GCM encryption. Your Vault Phrase is the second lock on your Vault. Whenever protected secret material needs to be revealed, Candler asks for this phrase first. You only need one Vault Phrase. Make it something memorable between 12 and 128 characters, such as “What's Your Favorite Scary Movie Sydney?” Your Vault stays unlocked for five minutes after successful verification. You can see the remaining unlock time at the top of Vault, and you can lock your Vault immediately at any time. When the timer expires, protected secret values are hidden again. Write your Vault Phrase down and keep it somewhere safe and separate. Never share it. Candler will never display your Vault Phrase back to you after setup. Candler support will never ask you to send us your Vault Phrase. The Vault Phrase is not the API key stored inside Vault, and it is not your Candler password. Keep important recovery information somewhere secure and separate from Candler—such as a reputable password manager, secure offline storage, or a written copy stored safely.",
+    title: VAULT_PHRASE_SETUP_TITLE,
+    body: VAULT_PHRASE_SETUP_COPY,
     selector: '[href="/app/vault"]',
+    interactive: "vault-phrase",
   },
   {
     id: "authenticator",
@@ -113,9 +121,9 @@ function useTourTarget(selector: string | undefined, phase: Phase) {
   return rect;
 }
 
-function cardStyle(rect: DOMRect | null): React.CSSProperties {
-  const CARD_W = 352;
-  const CARD_H_EST = 320;
+function cardStyle(rect: DOMRect | null, tall = false, preferAbove = false): React.CSSProperties {
+  const CARD_W = tall ? 384 : 352;
+  const CARD_H_EST = tall ? 560 : 320;
   const GAP = 20;
   const viewW = window.innerWidth;
   const viewH = window.innerHeight;
@@ -127,8 +135,22 @@ function cardStyle(rect: DOMRect | null): React.CSSProperties {
   if (!rect) {
     // Sit at ~30 % from the top (above centre) so the card clears the viewport
     // bottom on compact Windows laptops (1366×768 at 125–150 % display scaling).
-    const top = Math.max(GAP, Math.min(Math.round(viewH * 0.30), viewH - CARD_H_EST - GAP));
+    const topBias = tall ? 0.12 : 0.30;
+    const top = Math.max(GAP, Math.min(Math.round(viewH * topBias), viewH - CARD_H_EST - GAP));
     return { top, left: "50%", transform: "translateX(-50%)" };
+  }
+
+  // Prefer-above: position the card above the target with a gap.
+  // If the ideal position would clip the card above the viewport, clamp to GAP
+  // from the top — the card may overlap the target's top edge, but this is
+  // better than dropping the card below the target on compact displays.
+  if (preferAbove) {
+    const left = Math.max(GAP, Math.min(
+      Math.round(rect.left + rect.width / 2 - CARD_W / 2),
+      viewW - CARD_W - GAP,
+    ));
+    const aboveTop = rect.top - GAP - CARD_H_EST;
+    return { top: Math.max(GAP, aboveTop), left };
   }
 
   const centerY = Math.round(rect.top + rect.height / 2);
@@ -159,6 +181,7 @@ export function CandlerTour() {
   const mounted = useIsMounted();
   const [phase, setPhase] = useState<Phase>("hidden");
   const [stepIndex, setStepIndex] = useState(0);
+  const [vaultPhraseStatus, setVaultPhraseStatus] = useState<VaultPhraseSetupStatus>("needed");
   const cardRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -190,6 +213,7 @@ export function CandlerTour() {
 
   const handleNext = useCallback(() => {
     setStepIndex((i) => {
+      if (STEPS[i]?.interactive === "vault-phrase" && vaultPhraseStatus === "needed") return i;
       if (i < STEPS.length - 1) {
         setPhase("step");
         return i + 1;
@@ -197,7 +221,7 @@ export function CandlerTour() {
       setPhase("done");
       return i;
     });
-  }, []);
+  }, [vaultPhraseStatus]);
 
   const handleBack = useCallback(() => {
     setStepIndex((i) => {
@@ -238,13 +262,14 @@ export function CandlerTour() {
         return;
       }
       const inAppearance = (e.target as HTMLElement | null)?.closest(".tour-appearance");
-      if (e.key === "ArrowRight" && (phase === "welcome" || phase === "step") && !inAppearance) {
+      const inPhrase = (e.target as HTMLElement | null)?.closest(".vault-phrase-setup");
+      if (e.key === "ArrowRight" && (phase === "welcome" || phase === "step") && !inAppearance && !inPhrase) {
         e.preventDefault();
         if (phase === "welcome") handleStart();
         else handleNext();
         return;
       }
-      if (e.key === "ArrowLeft" && phase === "step" && !inAppearance) {
+      if (e.key === "ArrowLeft" && phase === "step" && !inAppearance && !inPhrase) {
         e.preventDefault();
         handleBack();
         return;
@@ -290,7 +315,23 @@ export function CandlerTour() {
       }
     : undefined;
 
-  const computedCardStyle = cardStyle(rect);
+  // Scroll the appearance panel into view if the user had scrolled away before
+  // the tour fired. On standard first-load it is already visible, so this is
+  // usually a no-op. Only runs on step entry.
+  useEffect(() => {
+    if (phase !== "step" || currentStep?.id !== "appearance") return;
+    const el = document.querySelector(".appearance-panel");
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.top >= 0 && r.bottom <= window.innerHeight) return;
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [phase, currentStep?.id]);
+
+  const computedCardStyle = cardStyle(
+    rect,
+    currentStep?.interactive === "vault-phrase",
+    currentStep?.preferAbove ?? false,
+  );
   const isNoTarget = phase === "welcome" || phase === "done" || !currentStep?.selector;
   const isFullDim = isNoTarget || !rect;
 
@@ -313,7 +354,7 @@ export function CandlerTour() {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`tour-card${!rect && phase === "step" && !currentStep?.selector ? " tour-card--centered" : ""}${currentStep?.interactive === "appearance" ? " tour-card--appearance" : ""}`}
+        className={`tour-card${!rect && phase === "step" && !currentStep?.selector ? " tour-card--centered" : ""}${currentStep?.interactive === "appearance" ? " tour-card--appearance" : ""}${currentStep?.interactive === "vault-phrase" ? " tour-card--vault-phrase" : ""}`}
         style={computedCardStyle}
         key={`${phase}-${stepIndex}`}
       >
@@ -329,6 +370,8 @@ export function CandlerTour() {
             onNext={handleNext}
             onBack={handleBack}
             onSkip={handleSkip}
+            phraseStatus={vaultPhraseStatus}
+            onPhraseStatus={setVaultPhraseStatus}
           />
         )}
         {phase === "done" && (
@@ -380,6 +423,8 @@ function StepCard({
   onNext,
   onBack,
   onSkip,
+  phraseStatus,
+  onPhraseStatus,
 }: {
   titleId: string;
   step: TourStep;
@@ -388,20 +433,29 @@ function StepCard({
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
+  phraseStatus: VaultPhraseSetupStatus;
+  onPhraseStatus: (status: VaultPhraseSetupStatus) => void;
 }) {
   const modK = useModShortcutLabel("K");
   const body = step.body.replaceAll("{modK}", modK);
   const modeLabel = useId();
   const accentLabel = useId();
+  const phraseBlocksNext = step.interactive === "vault-phrase" && phraseStatus === "needed";
   return (
     <>
       <p className="tour-card-eyebrow" aria-hidden="true">
         Step {stepIndex + 1} of {total}
       </p>
-      <h2 id={titleId} className="tour-card-h2">
-        {step.title}
-      </h2>
-      <p className="tour-card-body">{body}</p>
+      {step.interactive === "vault-phrase" ? (
+        <VaultPhraseSetup variant="tour" titleId={titleId} onStatus={onPhraseStatus} />
+      ) : (
+        <>
+          <h2 id={titleId} className="tour-card-h2">
+            {step.title}
+          </h2>
+          <p className="tour-card-body">{body}</p>
+        </>
+      )}
       {step.interactive === "appearance" ? (
         <div className="tour-appearance">
           <div className="appearance-field">
@@ -426,7 +480,13 @@ function StepCard({
             Back
           </button>
         )}
-        <button type="button" className="tour-btn-next" data-autofocus onClick={onNext}>
+        <button
+          type="button"
+          className="tour-btn-next"
+          data-autofocus={step.interactive === "vault-phrase" ? undefined : true}
+          onClick={onNext}
+          disabled={phraseBlocksNext}
+        >
           {stepIndex < total - 1 ? "Next" : "Finish"}
         </button>
       </div>

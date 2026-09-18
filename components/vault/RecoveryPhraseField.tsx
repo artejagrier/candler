@@ -16,6 +16,7 @@ export function RecoveryPhraseField({
   describedBy,
   error,
   autoFocus,
+  revealed = false,
 }: {
   id?: string;
   label: string;
@@ -26,6 +27,7 @@ export function RecoveryPhraseField({
   describedBy?: string;
   error?: string;
   autoFocus?: boolean;
+  revealed?: boolean;
 }) {
   const generatedId = useId();
   const fieldId = id ?? generatedId;
@@ -38,7 +40,7 @@ export function RecoveryPhraseField({
       {label}
       <input
         id={fieldId}
-        type="password"
+        type={revealed ? "text" : "password"}
         value={value}
         onChange={(event) => onChange(event.target.value.slice(0, RECOVERY_PHRASE_MAX))}
         maxLength={RECOVERY_PHRASE_MAX}

@@ -12,6 +12,7 @@ import { AddAccountDialog } from "@/components/vault/authenticator/AddAccountDia
 import { AuthenticatorDialog } from "@/components/vault/authenticator/AuthenticatorDialog";
 import { AuthenticatorMenu } from "@/components/vault/authenticator/AuthenticatorMenu";
 import { ProtectVaultDialog, UnlockVaultDialog } from "@/components/vault/VaultPhraseDialogs";
+import { VaultPhraseSetup } from "@/components/vault/VaultPhraseSetup";
 import { useHideSecretsOnVaultLock, useVaultUnlock } from "@/components/vault/VaultUnlockContext";
 import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase-copy";
 import { readUnlockExpiresAt } from "@/lib/vault/unlock-timer";
@@ -66,6 +67,7 @@ export function AuthenticatorClient({ entries, recoveryPhraseConfigured = false 
   const [phraseStage, setPhraseStage] = useState<null | { id: string; stage: "setup" | "unlock" }>(null);
   const [phraseError, setPhraseError] = useState("");
   const [unlockBusy, setUnlockBusy] = useState(false);
+  const [showPhraseSetup] = useState(!recoveryPhraseConfigured);
   const [busy, setBusy] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [recoveryHint, setRecoveryHint] = useState<{ issuer: string; account: string } | null>(null);
@@ -372,6 +374,14 @@ export function AuthenticatorClient({ entries, recoveryPhraseConfigured = false 
 
   return (
     <>
+      {showPhraseSetup ? (
+        <VaultPhraseSetup
+          variant="page"
+          onProtected={() => {
+            router.refresh();
+          }}
+        />
+      ) : null}
       <p className="authenticator-status">
         Protected by Candler
         {rows.length ? <span>{rows.length} {accountWord} secured</span> : null}

@@ -27,6 +27,8 @@ process.env.CANDLER_ENCRYPTION_KEY_V1 = Buffer.alloc(32, 9).toString("base64");
 
 const passphrase = "What's Your Favorite Scary Movie Sydney?";
 const phraseUi = readFileSync(new URL("../components/vault/VaultPhraseDialogs.tsx", import.meta.url), "utf8");
+const phraseSetup = readFileSync(new URL("../components/vault/VaultPhraseSetup.tsx", import.meta.url), "utf8");
+const phraseCopy = readFileSync(new URL("../lib/vault/recovery-phrase-copy.ts", import.meta.url), "utf8");
 const phraseField = readFileSync(new URL("../components/vault/RecoveryPhraseField.tsx", import.meta.url), "utf8");
 const vaultClient = readFileSync(new URL("../components/vault/VaultClient.tsx", import.meta.url), "utf8");
 const reveal = readFileSync(new URL("../app/api/vault/secrets/[id]/reveal/route.ts", import.meta.url), "utf8");
@@ -72,10 +74,15 @@ test("live character counters describe minimum, 12/128, and 128/128", () => {
   assert.equal(recoveryPhraseCounterLabel("a".repeat(128)), `128 / ${RECOVERY_PHRASE_MAX} characters`);
   assert.equal(phraseField.includes("maxLength={RECOVERY_PHRASE_MAX}"), true);
   assert.equal(phraseField.includes("recoveryPhraseCounterLabel"), true);
+  assert.equal(phraseField.includes("type={revealed ? \"text\" : \"password\"}"), true);
+  assert.equal(phraseSetup.includes('label="Vault Phrase"'), true);
+  assert.equal(phraseSetup.includes('label="Confirm Vault Phrase"'), true);
+  assert.equal(phraseSetup.includes('label="Recovery Phrase"'), false);
+  assert.equal(phraseSetup.includes("Show"), true);
+  assert.equal(phraseSetup.includes("Hide"), true);
+  assert.equal(phraseSetup.includes("Save Vault Phrase"), true);
   assert.equal(phraseUi.includes('label="Vault Phrase"'), true);
-  assert.equal(phraseUi.includes('label="Confirm Vault Phrase"'), true);
-  assert.equal(phraseUi.includes('label="Recovery Phrase"'), false);
-  assert.equal(phraseField.includes("type=\"password\""), true);
+  assert.equal(phraseUi.includes("Unlock & Reveal"), true);
 });
 
 test("correct phrase verifies and remains case-sensitive", () => {
@@ -155,21 +162,30 @@ test("Vault reveal, copy, recovery codes, and authenticator seeds require server
   assert.equal(seedReveal.includes("authorizeVaultSecretAccess"), true);
   assert.equal(vaultClient.includes("ProtectVaultDialog"), true);
   assert.equal(vaultClient.includes("UnlockVaultDialog"), true);
+  assert.equal(vaultClient.includes("VaultPhraseSetup"), true);
   assert.equal(vaultClient.includes("AddSecretDialog"), true);
   assert.equal(vaultClient.includes('intent, recoveryPhrase'), true);
   assert.equal(vaultClient.includes("revealed[id]"), true);
   assert.equal(vaultClient.includes("Leave blank to keep the current value"), true);
   assert.equal(vaultClient.includes("secretType"), true);
-  assert.equal(phraseUi.includes("Write your Vault Phrase down"), true);
-  assert.equal(phraseUi.includes("Candler will never display your Vault Phrase"), true);
-  assert.equal(phraseUi.includes("Candler support will never ask you to send us your Vault Phrase."), true);
-  assert.equal(phraseUi.includes("Protect My Vault"), true);
+  assert.equal(phraseSetup.includes("Save Vault Phrase"), true);
+  assert.equal(phraseSetup.includes("VAULT_PHRASE_SETUP_HELPER"), true);
+  assert.equal(phraseCopy.includes("Candler cannot show your Vault Phrase back to you later"), true);
+  assert.equal(phraseCopy.includes("Protect Your Vault"), true);
+  assert.equal(phraseCopy.includes("Vault protected."), true);
+  assert.equal(phraseCopy.includes("Your Vault is protected."), true);
+  assert.equal(phraseUi.includes("ProtectVaultDialog"), true);
   assert.equal(phraseUi.includes("Unlock & Reveal"), true);
   assert.equal(phraseUi.includes("Recovery Phrase"), false);
+  assert.equal(phraseSetup.includes("Recovery Phrase"), false);
   assert.equal(vaultPage.includes("Vault Phrase"), true);
   assert.equal(vaultPage.includes("Recovery Phrase"), false);
   assert.equal(agent.includes("decryptSecret"), false);
   assert.equal(agent.includes("ciphertext"), false);
+  assert.equal(phraseSetup.includes("/api/vault/recovery-phrase"), true);
+  assert.equal(phraseSetup.includes("response.status === 409"), true);
+  assert.equal(vaultClient.includes("localStorage"), false);
+  assert.equal(phraseSetup.includes("localStorage"), false);
 });
 
 test("existing encryption and secret CRUD remain the AES-256-GCM path", () => {
@@ -181,12 +197,16 @@ test("existing encryption and secret CRUD remain the AES-256-GCM path", () => {
 });
 
 test("tutorial and Authenticator notes keep product contracts", () => {
-  assert.equal(tour.includes("Your Vault Phrase is the second lock on your Vault."), true);
-  assert.equal(tour.includes("You only need one Vault Phrase"), true);
-  assert.equal(tour.includes("12 and 128 characters"), true);
+  assert.equal(tour.includes("VAULT_PHRASE_SETUP_TITLE"), true);
+  assert.equal(tour.includes("VAULT_PHRASE_SETUP_COPY"), true);
+  assert.equal(tour.includes("VaultPhraseSetup"), true);
+  assert.equal(phraseCopy.includes("Protect Your Vault"), true);
+  assert.equal(phraseCopy.includes("Create one Vault Phrase to protect your secrets"), true);
+  assert.equal(phraseCopy.includes("12–128"), true);
   assert.equal(tour.includes("Recovery Phrase"), false);
   assert.equal(authenticator.includes("Notes"), true);
   assert.equal(authenticator.includes("countdown"), true);
+  assert.equal(authenticator.includes("VaultPhraseSetup"), true);
   assert.equal(css.includes("conic-gradient(#B7FF2A 0%,#FF3D9A var(--progress)"), true);
   assert.equal(authenticator.includes("Scan QR") || readFileSync(new URL("../components/vault/authenticator/AddAccountDialog.tsx", import.meta.url), "utf8").includes("Scan QR code"), true);
 });
@@ -203,6 +223,19 @@ test("internal migration identifiers remain recovery_phrase compatible", () => {
   assert.equal(store.includes("vault_recovery_phrases"), true);
   assert.equal(route.includes("/api/vault/recovery-phrase") || true, true);
   assert.equal(vaultClient.includes("recoveryPhrase"), true);
+});
+
+test("one Vault Phrase per user is enforced and setup is shared", () => {
+  assert.equal(migration.includes("user_id uuid primary key"), true);
+  assert.equal(store.includes("error.code === \"23505\""), true);
+  assert.equal(phraseSetup.includes("VaultPhraseSetup"), true);
+  assert.equal(phraseUi.includes("VaultPhraseSetup"), true);
+  assert.equal(tour.includes("VaultPhraseSetup"), true);
+  assert.equal(vaultClient.includes("VaultPhraseSetup"), true);
+  assert.equal(authenticator.includes("VaultPhraseSetup"), true);
+  assert.equal(recoveryClient.includes("VaultPhraseSetup"), true);
+  assert.equal(route.includes("export async function GET"), true);
+  assert.equal(route.includes("hasVaultRecoveryPhrase"), true);
 });
 
 test("live unlock timer uses the server grant expiry and a fixed five-minute window", () => {

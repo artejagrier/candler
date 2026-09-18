@@ -35,3 +35,15 @@ export const VAULT_PHRASE_LENGTH = "Vault Phrase must be 12–128 characters.";
 export const VAULT_PHRASE_CONFIRM = "Vault Phrase and confirmation must match.";
 export const VAULT_PHRASE_EXISTS = "A Vault Phrase is already set for this Vault.";
 export const VAULT_PHRASE_SAVE_FAILED = "Vault Phrase could not be saved.";
+
+export const VAULT_PHRASE_SETUP_TITLE = "Protect Your Vault";
+export const VAULT_PHRASE_SETUP_COPY =
+  "Create one Vault Phrase to protect your secrets. Candler will ask for it before revealing protected information, and your Vault stays unlocked for 5 minutes after verification.";
+export const VAULT_PHRASE_SETUP_HELPER =
+  "Use something memorable between 12–128 characters. Candler cannot show your Vault Phrase back to you later, so keep a copy somewhere safe.";
+export const VAULT_PHRASE_PROTECTED_TITLE = "Vault protected.";
+export const VAULT_PHRASE_PROTECTED_COPY =
+  "Your Vault Phrase is set. You'll use it when Candler needs to reveal protected information.";
+export const VAULT_PHRASE_EXISTING_TITLE = "Your Vault is protected.";
+export const VAULT_PHRASE_EXISTING_COPY =
+  "Candler will ask for your Vault Phrase before revealing protected information. Successful verification unlocks your Vault for 5 minutes.";

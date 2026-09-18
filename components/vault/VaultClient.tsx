@@ -12,6 +12,7 @@ import { StepUpDialog } from "@/components/product/StepUpDialog";
 import { AddSecretDialog, type AddSecretPayload } from "@/components/vault/AddSecretDialog";
 import { VaultDialog } from "@/components/vault/VaultDialog";
 import { ProtectVaultDialog, UnlockVaultDialog } from "@/components/vault/VaultPhraseDialogs";
+import { VaultPhraseSetup } from "@/components/vault/VaultPhraseSetup";
 import { SmartImportDialog } from "@/components/vault/SmartImportDialog";
 import { useHideSecretsOnVaultLock, useVaultUnlock } from "@/components/vault/VaultUnlockContext";
 import { VAULT_PHRASE_MISMATCH } from "@/lib/vault/recovery-phrase-copy";
@@ -64,7 +65,7 @@ export function VaultClient({
   const [pendingAuth, setPendingAuth] = useState<VaultPendingAuth | null>(null);
   const [phraseGate, setPhraseGate] = useState<PhraseGate | null>(null);
   const [phraseError, setPhraseError] = useState("");
-  const [phraseConfigured, setPhraseConfigured] = useState(recoveryPhraseConfigured);
+  const [showPhraseSetup] = useState(!recoveryPhraseConfigured);
   const [busy, setBusy] = useState<BusyKey>(null);
   const { applyGrant } = useVaultUnlock();
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -457,6 +458,14 @@ export function VaultClient({
 
   return (
     <>
+      {showPhraseSetup ? (
+        <VaultPhraseSetup
+          variant="page"
+          onProtected={() => {
+            router.refresh();
+          }}
+        />
+      ) : null}
       <div className="data-toolbar vault-toolbar">
         <span>{visible.length} secret{visible.length === 1 ? "" : "s"}</span>
         <input
@@ -754,7 +763,6 @@ export function VaultClient({
           onClose={() => setPhraseGate(null)}
           onProtected={() => {
             const pending = phraseGate;
-            setPhraseConfigured(true);
             setPhraseGate(null);
             setMessage("Your Vault is protected.");
             if (pending.intent === "copy") void copySecret(pending.id);
